@@ -1747,18 +1747,18 @@
                                         <div class="mb-3">
                                             <label class="form-label">Название организации *</label>
                                             <input type="text" class="form-control" 
-                                                   x-model="settings.organizationName" required>
+                                                   x-model="data.settings.organizationName" required>
                                         </div>
                                         
                                         <div class="mb-3">
                                             <label class="form-label">ИНН организации</label>
                                             <input type="text" class="form-control" 
-                                                   x-model="settings.organizationINN">
+                                                   x-model="data.settings.organizationINN">
                                         </div>
                                         
                                         <div class="mb-3">
                                             <label class="form-label">Система налогообложения *</label>
-                                            <select class="form-select" x-model="settings.taxSystem" required>
+                                            <select class="form-select" x-model="data.settings.taxSystem" required>
                                                 <option value="usn_income">УСН (Доходы)</option>
                                                 <option value="usn_income_expense">УСН (Доходы-Расходы)</option>
                                                 <option value="osno">ОСНО</option>
@@ -1769,7 +1769,7 @@
                                         
                                         <div class="mb-3">
                                             <label class="form-label">Валюта</label>
-                                            <select class="form-select" x-model="settings.currency">
+                                            <select class="form-select" x-model="data.settings.currency">
                                                 <option value="RUB">Рубль (RUB)</option>
                                                 <option value="USD">Доллар (USD)</option>
                                                 <option value="EUR">Евро (EUR)</option>
@@ -1778,7 +1778,7 @@
                                         
                                         <div class="mb-3">
                                             <label class="form-label">Автосохранение</label>
-                                            <select class="form-select" x-model="settings.autoSave">
+                                            <select class="form-select" x-model="data.settings.autoSave">
                                                 <option value="true">Включено</option>
                                                 <option value="false">Выключено</option>
                                             </select>
@@ -1786,7 +1786,7 @@
                                         
                                         <div class="mb-3 form-check">
                                             <input type="checkbox" class="form-check-input" 
-                                                   x-model="settings.showNotifications">
+                                                   x-model="data.settings.showNotifications">
                                             <label class="form-check-label">Показывать уведомления</label>
                                         </div>
                                         
@@ -1872,9 +1872,13 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <script>
+        // Глобальные переменные для доступа к данным приложения
+        let globalApp = null;
+        
         // Утилитарные функции
         const Utils = {
             formatCurrency: (amount) => {
+                if (!amount && amount !== 0) return '0.00';
                 return new Intl.NumberFormat('ru-RU', {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2
@@ -1883,11 +1887,15 @@
             
             formatDate: (date) => {
                 if (!date) return '';
-                return new Date(date).toLocaleDateString('ru-RU', {
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: 'numeric'
-                });
+                try {
+                    return new Date(date).toLocaleDateString('ru-RU', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric'
+                    });
+                } catch (e) {
+                    return date;
+                }
             },
             
             generateId: () => {
@@ -2006,6 +2014,7 @@
                 
                 // Инициализация
                 init() {
+                    globalApp = this;
                     this.loadData();
                     this.setupRouter();
                 },
@@ -2016,7 +2025,11 @@
                     keys.forEach(key => {
                         const saved = localStorage.getItem(`pocket_accounting_${key}`);
                         if (saved) {
-                            this.data[key] = JSON.parse(saved);
+                            try {
+                                this.data[key] = JSON.parse(saved);
+                            } catch (e) {
+                                console.error(`Error parsing ${key}:`, e);
+                            }
                         }
                     });
                     
@@ -2335,7 +2348,7 @@
                                 currency: 'RUB',
                                 autoSave: 'true',
                                 showNotifications: true
-                            } : key === 'accounts' ? [] : [];
+                            } : key === 'accounts' ? this.data.accounts : [];
                         });
                         
                         this.initializeDemoData();
@@ -2394,17 +2407,28 @@
                 
                 // Инициализация
                 init() {
+                    // Инициализация newTransaction
+                    this.newTransaction = {
+                        date: new Date().toISOString().split('T')[0],
+                        operationType: '',
+                        contractorId: '',
+                        amount: 0,
+                        description: '',
+                        status: 'pending'
+                    };
+                    
                     this.loadData();
                     this.filterTransactions();
                 },
                 
                 // Загрузка данных
                 loadData() {
-                    const mainApp = document.querySelector('[x-data="app()"]').__x.$data;
-                    this.transactions = mainApp.data.transactions;
-                    this.operationTypes = mainApp.data.operationTypes;
-                    this.contractors = mainApp.data.contractors;
-                    this.rules = mainApp.getActiveRules();
+                    if (globalApp) {
+                        this.transactions = globalApp.data.transactions || [];
+                        this.operationTypes = globalApp.data.operationTypes || [];
+                        this.contractors = globalApp.data.contractors || [];
+                        this.rules = globalApp.getActiveRules() || [];
+                    }
                 },
                 
                 // Фильтрация транзакций
@@ -2418,7 +2442,7 @@
                     }
                     
                     this.filteredTransactions.sort((a, b) => 
-                        new Date(b.date) - new Date(a.date)
+                        new Date(b.date || 0) - new Date(a.date || 0)
                     );
                 },
                 
@@ -2440,20 +2464,24 @@
                 
                 // Получение названия типа операции
                 getOperationTypeName(typeId) {
-                    const mainApp = document.querySelector('[x-data="app()"]').__x.$data;
-                    return mainApp.getOperationTypeName(typeId);
+                    if (globalApp) {
+                        return globalApp.getOperationTypeName(typeId);
+                    }
+                    return typeId;
                 },
                 
                 // Получение имени контрагента
                 getContractorName(contractorId) {
                     if (!contractorId) return '';
-                    const mainApp = document.querySelector('[x-data="app()"]').__x.$data;
-                    const contractor = mainApp.getContractorById(contractorId);
-                    return contractor ? contractor.name : '';
+                    if (globalApp) {
+                        const contractor = globalApp.getContractorById(contractorId);
+                        return contractor ? contractor.name : '';
+                    }
+                    return '';
                 },
                 
                 // Добавление новой транзакции
-                async addTransaction() {
+                addTransaction() {
                     this.isProcessing = true;
                     
                     const transaction = {
@@ -2465,7 +2493,7 @@
                     this.transactions.push(transaction);
                     
                     // Автоматически применяем правило если возможно
-                    await this.applyRuleToTransaction(transaction.id);
+                    this.applyRuleToTransaction(transaction.id);
                     
                     this.saveTransactions();
                     this.resetForm();
@@ -2473,8 +2501,9 @@
                     
                     this.isProcessing = false;
                     
-                    const mainApp = document.querySelector('[x-data="app()"]').__x.$data;
-                    mainApp.addNotification('success', 'Операция добавлена');
+                    if (globalApp) {
+                        globalApp.addNotification('success', 'Операция добавлена');
+                    }
                 },
                 
                 // Сброс формы
@@ -2490,8 +2519,8 @@
                 },
                 
                 // Применение правила к транзакции
-                async applyRuleToTransaction(transactionId) {
-                    const mainApp = document.querySelector('[x-data="app()"]').__x.$data;
+                applyRuleToTransaction(transactionId) {
+                    if (!globalApp) return;
                     
                     const transactionIndex = this.transactions.findIndex(t => t.id === transactionId);
                     if (transactionIndex === -1) return;
@@ -2518,18 +2547,18 @@
                                 createdAt: new Date().toISOString()
                             };
                             
-                            mainApp.data.journal.push(journalEntry);
+                            globalApp.data.journal.push(journalEntry);
                         });
                         
                         // Обновляем транзакцию
                         transaction.status = 'processed';
                         transaction.ruleApplied = matchingRule.id;
                         
-                        mainApp.saveData('journal');
-                        mainApp.addNotification('success', 
+                        globalApp.saveData('journal');
+                        globalApp.addNotification('success', 
                             `Правило "${matchingRule.name}" применено к операции`);
                     } else {
-                        mainApp.addNotification('warning', 
+                        globalApp.addNotification('warning', 
                             'Не найдено подходящего правила для операции');
                     }
                     
@@ -2539,10 +2568,10 @@
                 
                 // Поиск подходящего правила
                 findMatchingRule(transaction) {
-                    const sortedRules = [...this.rules].sort((a, b) => a.priority - b.priority);
+                    const sortedRules = [...this.rules].sort((a, b) => (a.priority || 10) - (b.priority || 10));
                     
                     for (const rule of sortedRules) {
-                        if (this.checkConditions(rule.conditions, transaction)) {
+                        if (this.checkConditions(rule.conditions || [], transaction)) {
                             return rule;
                         }
                     }
@@ -2585,12 +2614,13 @@
                 },
                 
                 // Применение правил ко всем ожидающим
-                async applyRulesToPending() {
-                    const mainApp = document.querySelector('[x-data="app()"]').__x.$data;
+                applyRulesToPending() {
+                    if (!globalApp) return;
+                    
                     const pending = this.transactions.filter(t => t.status === 'pending');
                     
                     if (pending.length === 0) {
-                        mainApp.addNotification('info', 'Нет ожидающих операций');
+                        globalApp.addNotification('info', 'Нет ожидающих операций');
                         return;
                     }
                     
@@ -2598,21 +2628,20 @@
                     let processed = 0;
                     
                     for (const transaction of pending) {
-                        await this.applyRuleToTransaction(transaction.id);
+                        this.applyRuleToTransaction(transaction.id);
                         processed++;
                     }
                     
                     this.isProcessing = false;
-                    mainApp.addNotification('success', 
+                    globalApp.addNotification('success', 
                         `Обработано ${processed} из ${pending.length} операций`);
                 },
                 
                 // Просмотр деталей транзакции
                 viewTransaction(transactionId) {
                     const transaction = this.transactions.find(t => t.id === transactionId);
-                    const mainApp = document.querySelector('[x-data="app()"]').__x.$data;
                     
-                    if (!transaction) return;
+                    if (!transaction || !globalApp) return;
                     
                     let html = `
                         <div class="mb-4">
@@ -2655,7 +2684,7 @@
                     `;
                     
                     // Если есть проводки
-                    const journalEntries = mainApp.data.journal.filter(
+                    const journalEntries = globalApp.data.journal.filter(
                         je => je.transactionId === transaction.id
                     );
                     
@@ -2680,8 +2709,8 @@
                         `;
                         
                         journalEntries.forEach(entry => {
-                            const debitAccount = mainApp.getAccountByCode(entry.debit);
-                            const creditAccount = mainApp.getAccountByCode(entry.credit);
+                            const debitAccount = globalApp.getAccountByCode(entry.debit);
+                            const creditAccount = globalApp.getAccountByCode(entry.credit);
                             
                             html += `
                                 <tr>
@@ -2742,8 +2771,9 @@
                         const modal = bootstrap.Modal.getInstance(document.getElementById('editTransactionModal'));
                         modal.hide();
                         
-                        const mainApp = document.querySelector('[x-data="app()"]').__x.$data;
-                        mainApp.addNotification('success', 'Операция обновлена');
+                        if (globalApp) {
+                            globalApp.addNotification('success', 'Операция обновлена');
+                        }
                     }
                 },
                 
@@ -2756,17 +2786,19 @@
                             this.saveTransactions();
                             this.filterTransactions();
                             
-                            const mainApp = document.querySelector('[x-data="app()"]').__x.$data;
-                            mainApp.addNotification('warning', 'Операция удалена');
+                            if (globalApp) {
+                                globalApp.addNotification('warning', 'Операция удалена');
+                            }
                         }
                     }
                 },
                 
                 // Сохранение транзакций
                 saveTransactions() {
-                    const mainApp = document.querySelector('[x-data="app()"]').__x.$data;
-                    mainApp.data.transactions = this.transactions;
-                    mainApp.saveData('transactions');
+                    if (globalApp) {
+                        globalApp.data.transactions = this.transactions;
+                        globalApp.saveData('transactions');
+                    }
                 },
                 
                 // Показать модальное окно импорта
@@ -2827,8 +2859,9 @@
                             const modal = bootstrap.Modal.getInstance(document.getElementById('importModal'));
                             modal.hide();
                             
-                            const mainApp = document.querySelector('[x-data="app()"]').__x.$data;
-                            mainApp.addNotification('success', `Импортировано ${importedTransactions.length} операций`);
+                            if (globalApp) {
+                                globalApp.addNotification('success', `Импортировано ${importedTransactions.length} операций`);
+                            }
                         } else {
                             alert('Не удалось импортировать операции. Проверьте формат данных.');
                         }
@@ -2862,15 +2895,17 @@
                 
                 // Инициализация
                 init() {
+                    this.resetCurrentRule();
                     this.loadRules();
                 },
                 
                 // Загрузка правил
                 loadRules() {
-                    const mainApp = document.querySelector('[x-data="app()"]').__x.$data;
-                    this.rules = mainApp.data.rules;
-                    this.filteredRules = [...this.rules];
-                    this.accounts = mainApp.data.accounts;
+                    if (globalApp) {
+                        this.rules = globalApp.data.rules || [];
+                        this.filteredRules = [...this.rules];
+                        this.accounts = globalApp.data.accounts || [];
+                    }
                 },
                 
                 // Фильтрация правил
@@ -2887,7 +2922,7 @@
                         return matchesSearch && matchesStatus;
                     });
                     
-                    this.filteredRules.sort((a, b) => a.priority - b.priority);
+                    this.filteredRules.sort((a, b) => (a.priority || 10) - (b.priority || 10));
                 },
                 
                 // Сброс фильтров
@@ -2979,7 +3014,7 @@
                         return;
                     }
                     
-                    const mainApp = document.querySelector('[x-data="app()"]').__x.$data;
+                    if (!globalApp) return;
                     
                     if (this.editingRule) {
                         const oldRule = this.rules.find(r => r.id === this.editingRule);
@@ -2995,15 +3030,15 @@
                         this.rules.push(this.currentRule);
                     }
                     
-                    mainApp.data.rules = this.rules;
-                    mainApp.saveData('rules');
+                    globalApp.data.rules = this.rules;
+                    globalApp.saveData('rules');
                     
                     this.filterRules();
                     
                     const modal = bootstrap.Modal.getInstance(document.getElementById('ruleModal'));
                     modal.hide();
                     
-                    mainApp.addNotification('success', 
+                    globalApp.addNotification('success', 
                         this.editingRule ? 'Правило обновлено' : 'Правило создано');
                 },
                 
@@ -3026,12 +3061,13 @@
                         
                         this.rules.push(clonedRule);
                         
-                        const mainApp = document.querySelector('[x-data="app()"]').__x.$data;
-                        mainApp.data.rules = this.rules;
-                        mainApp.saveData('rules');
-                        
-                        this.filterRules();
-                        mainApp.addNotification('success', 'Правило скопировано');
+                        if (globalApp) {
+                            globalApp.data.rules = this.rules;
+                            globalApp.saveData('rules');
+                            
+                            this.filterRules();
+                            globalApp.addNotification('success', 'Правило скопировано');
+                        }
                     }
                 },
                 
@@ -3042,13 +3078,14 @@
                         rule.active = !rule.active;
                         rule.updated = new Date().toISOString();
                         
-                        const mainApp = document.querySelector('[x-data="app()"]').__x.$data;
-                        mainApp.data.rules = this.rules;
-                        mainApp.saveData('rules');
-                        
-                        this.filterRules();
-                        mainApp.addNotification('info', 
-                            rule.active ? 'Правило активировано' : 'Правило деактивировано');
+                        if (globalApp) {
+                            globalApp.data.rules = this.rules;
+                            globalApp.saveData('rules');
+                            
+                            this.filterRules();
+                            globalApp.addNotification('info', 
+                                rule.active ? 'Правило активировано' : 'Правило деактивировано');
+                        }
                     }
                 },
                 
@@ -3059,20 +3096,22 @@
                         if (index > -1) {
                             this.rules.splice(index, 1);
                             
-                            const mainApp = document.querySelector('[x-data="app()"]').__x.$data;
-                            mainApp.data.rules = this.rules;
-                            mainApp.saveData('rules');
-                            
-                            this.filterRules();
-                            mainApp.addNotification('warning', 'Правило удалено');
+                            if (globalApp) {
+                                globalApp.data.rules = this.rules;
+                                globalApp.saveData('rules');
+                                
+                                this.filterRules();
+                                globalApp.addNotification('warning', 'Правило удалено');
+                            }
                         }
                     }
                 },
                 
                 // Тестирование правила
                 testRule(ruleId) {
-                    const mainApp = document.querySelector('[x-data="app()"]').__x.$data;
-                    mainApp.addNotification('info', 'Тестирование правила: функция в разработке');
+                    if (globalApp) {
+                        globalApp.addNotification('info', 'Тестирование правила: функция в разработке');
+                    }
                 },
                 
                 // Показать модальное окно версий
@@ -3095,12 +3134,13 @@
                                 this.rules[index] = restoredRule;
                             }
                             
-                            const mainApp = document.querySelector('[x-data="app()"]').__x.$data;
-                            mainApp.data.rules = this.rules;
-                            mainApp.saveData('rules');
-                            
-                            this.filterRules();
-                            mainApp.addNotification('success', 'Версия правила восстановлена');
+                            if (globalApp) {
+                                globalApp.data.rules = this.rules;
+                                globalApp.saveData('rules');
+                                
+                                this.filterRules();
+                                globalApp.addNotification('success', 'Версия правила восстановлена');
+                            }
                         }
                     }
                 },
@@ -3131,17 +3171,18 @@
                 
                 // Загрузка данных
                 loadData() {
-                    const mainApp = document.querySelector('[x-data="app()"]').__x.$data;
-                    this.journal = mainApp.data.journal;
-                    this.accounts = mainApp.data.accounts;
-                    
-                    // Устанавливаем даты по умолчанию (последние 30 дней)
-                    const today = new Date();
-                    const monthAgo = new Date(today);
-                    monthAgo.setDate(today.getDate() - 30);
-                    
-                    this.filterDateFrom = monthAgo.toISOString().split('T')[0];
-                    this.filterDateTo = today.toISOString().split('T')[0];
+                    if (globalApp) {
+                        this.journal = globalApp.data.journal || [];
+                        this.accounts = globalApp.data.accounts || [];
+                        
+                        // Устанавливаем даты по умолчанию (последние 30 дней)
+                        const today = new Date();
+                        const monthAgo = new Date(today);
+                        monthAgo.setDate(today.getDate() - 30);
+                        
+                        this.filterDateFrom = monthAgo.toISOString().split('T')[0];
+                        this.filterDateTo = today.toISOString().split('T')[0];
+                    }
                 },
                 
                 // Фильтрация журнала
@@ -3150,13 +3191,13 @@
                     
                     if (this.filterDateFrom) {
                         filtered = filtered.filter(entry => 
-                            new Date(entry.date) >= new Date(this.filterDateFrom)
+                            new Date(entry.date || 0) >= new Date(this.filterDateFrom)
                         );
                     }
                     
                     if (this.filterDateTo) {
                         filtered = filtered.filter(entry => 
-                            new Date(entry.date) <= new Date(this.filterDateTo + 'T23:59:59')
+                            new Date(entry.date || 0) <= new Date(this.filterDateTo + 'T23:59:59')
                         );
                     }
                     
@@ -3167,7 +3208,7 @@
                     }
                     
                     this.filteredJournal = filtered.sort((a, b) => 
-                        new Date(b.date) - new Date(a.date)
+                        new Date(b.date || 0) - new Date(a.date || 0)
                     );
                 },
                 
@@ -3203,7 +3244,7 @@
                         if (!summary[entry.debit]) {
                             summary[entry.debit] = 0;
                         }
-                        summary[entry.debit] += entry.amount;
+                        summary[entry.debit] += entry.amount || 0;
                     });
                     
                     return Object.keys(summary).map(code => ({
@@ -3220,7 +3261,7 @@
                         if (!summary[entry.credit]) {
                             summary[entry.credit] = 0;
                         }
-                        summary[entry.credit] += entry.amount;
+                        summary[entry.credit] += entry.amount || 0;
                     });
                     
                     return Object.keys(summary).map(code => ({
@@ -3244,35 +3285,37 @@
                     
                     Utils.downloadJSON(exportData, `journal_${new Date().toISOString().split('T')[0]}.json`);
                     
-                    const mainApp = document.querySelector('[x-data="app()"]').__x.$data;
-                    mainApp.addNotification('success', 'Журнал экспортирован');
+                    if (globalApp) {
+                        globalApp.addNotification('success', 'Журнал экспортирован');
+                    }
                 },
                 
                 // Удаление проводки
                 deleteJournalEntry(entryId) {
                     if (confirm('Вы уверены, что хотите удалить эту проводку?')) {
-                        const mainApp = document.querySelector('[x-data="app()"]').__x.$data;
-                        const index = mainApp.data.journal.findIndex(je => je.id === entryId);
+                        if (!globalApp) return;
+                        
+                        const index = globalApp.data.journal.findIndex(je => je.id === entryId);
                         
                         if (index > -1) {
                             // Находим связанную транзакцию и сбрасываем ее статус
-                            const entry = mainApp.data.journal[index];
-                            const transactionIndex = mainApp.data.transactions.findIndex(t => t.id === entry.transactionId);
+                            const entry = globalApp.data.journal[index];
+                            const transactionIndex = globalApp.data.transactions.findIndex(t => t.id === entry.transactionId);
                             
                             if (transactionIndex > -1) {
-                                mainApp.data.transactions[transactionIndex].status = 'pending';
-                                mainApp.data.transactions[transactionIndex].ruleApplied = null;
-                                mainApp.data.transactions[transactionIndex].journalEntryId = null;
+                                globalApp.data.transactions[transactionIndex].status = 'pending';
+                                globalApp.data.transactions[transactionIndex].ruleApplied = null;
+                                globalApp.data.transactions[transactionIndex].journalEntryId = null;
                             }
                             
-                            mainApp.data.journal.splice(index, 1);
-                            mainApp.saveData('journal');
-                            mainApp.saveData('transactions');
+                            globalApp.data.journal.splice(index, 1);
+                            globalApp.saveData('journal');
+                            globalApp.saveData('transactions');
                             
-                            this.journal = mainApp.data.journal;
+                            this.journal = globalApp.data.journal;
                             this.filterJournal();
                             
-                            mainApp.addNotification('warning', 'Проводка удалена');
+                            globalApp.addNotification('warning', 'Проводка удалена');
                         }
                     }
                 },
@@ -3280,22 +3323,23 @@
                 // Очистка журнала
                 clearJournal() {
                     if (confirm('Вы уверены, что хотите очистить весь журнал проводок?')) {
-                        const mainApp = document.querySelector('[x-data="app()"]').__x.$data;
-                        mainApp.data.journal = [];
-                        mainApp.saveData('journal');
+                        if (!globalApp) return;
+                        
+                        globalApp.data.journal = [];
+                        globalApp.saveData('journal');
                         
                         // Сбрасываем статусы транзакций
-                        mainApp.data.transactions.forEach(tx => {
+                        globalApp.data.transactions.forEach(tx => {
                             tx.status = 'pending';
                             tx.ruleApplied = null;
                             tx.journalEntryId = null;
                         });
-                        mainApp.saveData('transactions');
+                        globalApp.saveData('transactions');
                         
                         this.journal = [];
                         this.filterJournal();
                         
-                        mainApp.addNotification('warning', 'Журнал проводок очищен');
+                        globalApp.addNotification('warning', 'Журнал проводок очищен');
                     }
                 }
             };
@@ -3320,16 +3364,17 @@
                 
                 // Инициализация
                 init() {
-                    const mainApp = document.querySelector('[x-data="app()"]').__x.$data;
-                    this.accounts = mainApp.data.accounts;
-                    this.journal = mainApp.data.journal;
-                    
-                    // Устанавливаем даты по умолчанию (текущий месяц)
-                    const today = new Date();
-                    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-                    
-                    this.reportParams.dateFrom = firstDay.toISOString().split('T')[0];
-                    this.reportParams.dateTo = today.toISOString().split('T')[0];
+                    if (globalApp) {
+                        this.accounts = globalApp.data.accounts || [];
+                        this.journal = globalApp.data.journal || [];
+                        
+                        // Устанавливаем даты по умолчанию (текущий месяц)
+                        const today = new Date();
+                        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+                        
+                        this.reportParams.dateFrom = firstDay.toISOString().split('T')[0];
+                        this.reportParams.dateTo = today.toISOString().split('T')[0];
+                    }
                 },
                 
                 // Генерация отчета
@@ -3359,10 +3404,10 @@
                     this.currentReport.name = 'Оборотно-сальдовая ведомость';
                     
                     const filteredJournal = this.journal.filter(entry => {
-                        if (this.reportParams.dateFrom && new Date(entry.date) < new Date(this.reportParams.dateFrom)) {
+                        if (this.reportParams.dateFrom && new Date(entry.date || 0) < new Date(this.reportParams.dateFrom)) {
                             return false;
                         }
-                        if (this.reportParams.dateTo && new Date(entry.date) > new Date(this.reportParams.dateTo + 'T23:59:59')) {
+                        if (this.reportParams.dateTo && new Date(entry.date || 0) > new Date(this.reportParams.dateTo + 'T23:59:59')) {
                             return false;
                         }
                         return true;
@@ -3387,7 +3432,7 @@
                         }
                         
                         const accountEntries = filteredJournal.filter(entry => 
-                            entry.debit === account.code || entry.credit === entry.code
+                            entry.debit === account.code || entry.credit === account.code
                         );
                         
                         // Начальные остатки (в простой реализации считаем 0)
@@ -3400,10 +3445,10 @@
                         
                         accountEntries.forEach(entry => {
                             if (entry.debit === account.code) {
-                                turnoverDebit += entry.amount;
+                                turnoverDebit += entry.amount || 0;
                             }
                             if (entry.credit === account.code) {
-                                turnoverCredit += entry.amount;
+                                turnoverCredit += entry.amount || 0;
                             }
                         });
                         
@@ -3458,17 +3503,17 @@
                     this.currentReport.name = `Анализ счета: ${account.code} - ${account.name}`;
                     
                     const filteredJournal = this.journal.filter(entry => {
-                        if (this.reportParams.dateFrom && new Date(entry.date) < new Date(this.reportParams.dateFrom)) {
+                        if (this.reportParams.dateFrom && new Date(entry.date || 0) < new Date(this.reportParams.dateFrom)) {
                             return false;
                         }
-                        if (this.reportParams.dateTo && new Date(entry.date) > new Date(this.reportParams.dateTo + 'T23:59:59')) {
+                        if (this.reportParams.dateTo && new Date(entry.date || 0) > new Date(this.reportParams.dateTo + 'T23:59:59')) {
                             return false;
                         }
                         if (entry.debit !== account.code && entry.credit !== account.code) {
                             return false;
                         }
                         return true;
-                    }).sort((a, b) => new Date(a.date) - new Date(b.date));
+                    }).sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
                     
                     let balance = 0;
                     const entries = filteredJournal.map(entry => {
@@ -3476,11 +3521,11 @@
                         let credit = 0;
                         
                         if (entry.debit === account.code) {
-                            debit = entry.amount;
-                            balance += entry.amount;
+                            debit = entry.amount || 0;
+                            balance += entry.amount || 0;
                         } else if (entry.credit === account.code) {
-                            credit = entry.amount;
-                            balance -= entry.amount;
+                            credit = entry.amount || 0;
+                            balance -= entry.amount || 0;
                         }
                         
                         return {
@@ -3517,8 +3562,9 @@
                     Utils.downloadJSON(this.currentReport.data, 
                         `report_${this.currentReport.type}_${new Date().toISOString().split('T')[0]}.json`);
                     
-                    const mainApp = document.querySelector('[x-data="app()"]').__x.$data;
-                    mainApp.addNotification('success', 'Отчет экспортирован');
+                    if (globalApp) {
+                        globalApp.addNotification('success', 'Отчет экспортирован');
+                    }
                 },
                 
                 // Печать отчета
@@ -3561,9 +3607,10 @@
                 
                 // Загрузка счетов
                 loadAccounts() {
-                    const mainApp = document.querySelector('[x-data="app()"]').__x.$data;
-                    this.accounts = mainApp.data.accounts;
-                    this.filteredAccounts = [...this.accounts];
+                    if (globalApp) {
+                        this.accounts = globalApp.data.accounts || [];
+                        this.filteredAccounts = [...this.accounts];
+                    }
                 },
                 
                 // Фильтрация счетов
@@ -3638,7 +3685,7 @@
                         return;
                     }
                     
-                    const mainApp = document.querySelector('[x-data="app()"]').__x.$data;
+                    if (!globalApp) return;
                     
                     if (this.editingAccount) {
                         const index = this.accounts.findIndex(acc => acc.code === this.editingAccount);
@@ -3654,24 +3701,25 @@
                         this.accounts.push(this.currentAccount);
                     }
                     
-                    mainApp.data.accounts = this.accounts;
-                    mainApp.saveData('accounts');
+                    globalApp.data.accounts = this.accounts;
+                    globalApp.saveData('accounts');
                     
                     this.filterAccounts();
                     
                     const modal = bootstrap.Modal.getInstance(document.getElementById('accountModal'));
                     modal.hide();
                     
-                    mainApp.addNotification('success', 
+                    globalApp.addNotification('success', 
                         this.editingAccount ? 'Счет обновлен' : 'Счет создан');
                 },
                 
                 // Удаление счета
                 deleteAccount(accountCode) {
                     if (confirm('Вы уверены, что хотите удалить этот счет?')) {
+                        if (!globalApp) return;
+                        
                         // Проверяем, используется ли счет в проводках
-                        const mainApp = document.querySelector('[x-data="app()"]').__x.$data;
-                        const usedInJournal = mainApp.data.journal.some(entry => 
+                        const usedInJournal = globalApp.data.journal.some(entry => 
                             entry.debit === accountCode || entry.credit === accountCode
                         );
                         
@@ -3684,11 +3732,11 @@
                         if (index > -1) {
                             this.accounts.splice(index, 1);
                             
-                            mainApp.data.accounts = this.accounts;
-                            mainApp.saveData('accounts');
+                            globalApp.data.accounts = this.accounts;
+                            globalApp.saveData('accounts');
                             
                             this.filterAccounts();
-                            mainApp.addNotification('warning', 'Счет удален');
+                            globalApp.addNotification('warning', 'Счет удален');
                         }
                     }
                 }
@@ -3705,6 +3753,7 @@
                 filterType: '',
                 editingContractor: null,
                 currentContractor: {
+                    id: '',
                     name: '',
                     type: '',
                     inn: '',
@@ -3722,9 +3771,10 @@
                 
                 // Загрузка контрагентов
                 loadContractors() {
-                    const mainApp = document.querySelector('[x-data="app()"]').__x.$data;
-                    this.contractors = mainApp.data.contractors;
-                    this.filteredContractors = [...this.contractors];
+                    if (globalApp) {
+                        this.contractors = globalApp.data.contractors || [];
+                        this.filteredContractors = [...this.contractors];
+                    }
                 },
                 
                 // Фильтрация контрагентов
@@ -3800,7 +3850,7 @@
                         return;
                     }
                     
-                    const mainApp = document.querySelector('[x-data="app()"]').__x.$data;
+                    if (!globalApp) return;
                     
                     if (this.editingContractor) {
                         const index = this.contractors.findIndex(c => c.id === this.editingContractor);
@@ -3811,15 +3861,15 @@
                         this.contractors.push(this.currentContractor);
                     }
                     
-                    mainApp.data.contractors = this.contractors;
-                    mainApp.saveData('contractors');
+                    globalApp.data.contractors = this.contractors;
+                    globalApp.saveData('contractors');
                     
                     this.filterContractors();
                     
                     const modal = bootstrap.Modal.getInstance(document.getElementById('contractorModal'));
                     modal.hide();
                     
-                    mainApp.addNotification('success', 
+                    globalApp.addNotification('success', 
                         this.editingContractor ? 'Контрагент обновлен' : 'Контрагент создан');
                 },
                 
@@ -3830,12 +3880,13 @@
                         if (index > -1) {
                             this.contractors.splice(index, 1);
                             
-                            const mainApp = document.querySelector('[x-data="app()"]').__x.$data;
-                            mainApp.data.contractors = this.contractors;
-                            mainApp.saveData('contractors');
-                            
-                            this.filterContractors();
-                            mainApp.addNotification('warning', 'Контрагент удален');
+                            if (globalApp) {
+                                globalApp.data.contractors = this.contractors;
+                                globalApp.saveData('contractors');
+                                
+                                this.filterContractors();
+                                globalApp.addNotification('warning', 'Контрагент удален');
+                            }
                         }
                     }
                 }
