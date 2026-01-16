@@ -432,9 +432,8 @@
                                                         </td>
                                                         <td>
                                                             <span class="badge badge-sm" 
-                                                                  :class="tx.status === 'processed' ? 'bg-success' : 'bg-warning'">
-                                                                <template x-if="tx.status === 'processed'">Обработано</template>
-                                                                <template x-if="tx.status === 'pending'">Ожидает</template>
+                                                                  :class="tx.status === 'processed' ? 'bg-success' : 'bg-warning'"
+                                                                  x-text="tx.status === 'processed' ? 'Обработано' : 'Ожидает'">
                                                             </span>
                                                         </td>
                                                     </tr>
@@ -616,9 +615,8 @@
                                                                   :class="{
                                                                       'bg-success': transaction.status === 'processed',
                                                                       'bg-warning': transaction.status === 'pending'
-                                                                  }">
-                                                                <template x-if="transaction.status === 'processed'">Обработано</template>
-                                                                <template x-if="transaction.status === 'pending'">Ожидает</template>
+                                                                  }"
+                                                                  x-text="transaction.status === 'processed' ? 'Обработано' : 'Ожидает'">
                                                             </span>
                                                         </td>
                                                         <td>
@@ -1129,8 +1127,8 @@
                                                         <td x-text="rule.actions.length"></td>
                                                         <td>
                                                             <span class="badge" 
-                                                                  :class="rule.active ? 'bg-success' : 'bg-secondary'">
-                                                                <span x-text="rule.active ? 'Активно' : 'Неактивно'"></span>
+                                                                  :class="rule.active ? 'bg-success' : 'bg-secondary'"
+                                                                  x-text="rule.active ? 'Активно' : 'Неактивно'">
                                                             </span>
                                                         </td>
                                                         <td>
@@ -1492,10 +1490,8 @@
                                                                       'bg-success': account.type === 'active',
                                                                       'bg-danger': account.type === 'passive',
                                                                       'bg-primary': account.type === 'active-passive'
-                                                                  }">
-                                                                <template x-if="account.type === 'active'">Активный</template>
-                                                                <template x-if="account.type === 'passive'">Пассивный</template>
-                                                                <template x-if="account.type === 'active-passive'">Активно-пассивный</template>
+                                                                  }"
+                                                                  x-text="account.type === 'active' ? 'Активный' : account.type === 'passive' ? 'Пассивный' : 'Активно-пассивный'">
                                                             </span>
                                                         </td>
                                                         <td>
@@ -1631,11 +1627,8 @@
                                                                       'bg-info': contractor.type === 'supplier',
                                                                       'bg-success': contractor.type === 'bank',
                                                                       'bg-secondary': contractor.type === 'other'
-                                                                  }">
-                                                                <template x-if="contractor.type === 'buyer'">Покупатель</template>
-                                                                <template x-if="contractor.type === 'supplier'">Поставщик</template>
-                                                                <template x-if="contractor.type === 'bank'">Банк</template>
-                                                                <template x-if="contractor.type === 'other'">Другое</template>
+                                                                  }"
+                                                                  x-text="contractor.type === 'buyer' ? 'Покупатель' : contractor.type === 'supplier' ? 'Поставщик' : contractor.type === 'bank' ? 'Банк' : 'Другое'">
                                                             </span>
                                                         </td>
                                                         <td class="mono-font" x-text="contractor.inn || '-'"></td>
@@ -2385,7 +2378,14 @@
                     description: '',
                     status: 'pending'
                 },
-                editingTransaction: null,
+                editingTransaction: {
+                    date: '',
+                    operationType: '',
+                    contractorId: '',
+                    amount: 0,
+                    description: '',
+                    status: 'pending'
+                },
                 operationTypes: [],
                 contractors: [],
                 rules: [],
@@ -2407,16 +2407,6 @@
                 
                 // Инициализация
                 init() {
-                    // Инициализация newTransaction
-                    this.newTransaction = {
-                        date: new Date().toISOString().split('T')[0],
-                        operationType: '',
-                        contractorId: '',
-                        amount: 0,
-                        description: '',
-                        status: 'pending'
-                    };
-                    
                     this.loadData();
                     this.filterTransactions();
                 },
