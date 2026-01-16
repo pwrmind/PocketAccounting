@@ -107,12 +107,10 @@
         }
         
         .main-content {
-            /* margin-left: 220px; */
             transition: all 0.3s;
         }
         
         .main-content-expanded {
-            /* margin-left: 60px; */
         }
         
         .table-sm-compact th,
@@ -1922,6 +1920,10 @@
                 a.click();
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
+            },
+            
+            roundToTwoDecimals: (num) => {
+                return Math.round((num + Number.EPSILON) * 100) / 100;
             }
         };
         
@@ -2593,14 +2595,17 @@
                     });
                 },
                 
-                // Расчет суммы
+                // Расчет суммы с округлением
                 calculateAmount(baseAmount, amountType) {
+                    let result;
                     switch (amountType) {
-                        case 'full': return baseAmount;
-                        case 'half': return baseAmount / 2;
-                        case 'quarter': return baseAmount / 4;
-                        default: return baseAmount;
+                        case 'full': result = baseAmount; break;
+                        case 'half': result = baseAmount / 2; break;
+                        case 'quarter': result = baseAmount / 4; break;
+                        default: result = baseAmount;
                     }
+                    // Округляем до 2 знаков после запятой
+                    return Utils.roundToTwoDecimals(result);
                 },
                 
                 // Применение правил ко всем ожидающим
@@ -3226,7 +3231,7 @@
                     return account ? account.name : '';
                 },
                 
-                // Сводка по дебету
+                // Сводка по дебету (только для отфильтрованных проводок)
                 get debitSummary() {
                     const summary = {};
                     
@@ -3239,11 +3244,11 @@
                     
                     return Object.keys(summary).map(code => ({
                         account: code,
-                        total: summary[code]
+                        total: Utils.roundToTwoDecimals(summary[code])
                     })).sort((a, b) => b.total - a.total);
                 },
                 
-                // Сводка по кредиту
+                // Сводка по кредиту (только для отфильтрованных проводок)
                 get creditSummary() {
                     const summary = {};
                     
@@ -3256,7 +3261,7 @@
                     
                     return Object.keys(summary).map(code => ({
                         account: code,
-                        total: summary[code]
+                        total: Utils.roundToTwoDecimals(summary[code])
                     })).sort((a, b) => b.total - a.total);
                 },
                 
@@ -3442,23 +3447,51 @@
                             }
                         });
                         
-                        // Конечные остатки
-                        let endDebit = startDebit + turnoverDebit - turnoverCredit;
-                        let endCredit = startCredit + turnoverCredit - turnoverDebit;
+                        // Конечные остатки - правильная логика в зависимости от типа счета
+                        let endDebit = 0;
+                        let endCredit = 0;
                         
-                        if (endDebit < 0) {
-                            endCredit = Math.abs(endDebit);
-                            endDebit = 0;
-                        } else if (endCredit < 0) {
-                            endDebit = Math.abs(endCredit);
-                            endCredit = 0;
+                        if (account.type === 'active') {
+                            // Активный счет: остаток может быть только дебетовым или 0
+                            const balance = startDebit + turnoverDebit - turnoverCredit;
+                            if (balance >= 0) {
+                                endDebit = Utils.roundToTwoDecimals(balance);
+                                endCredit = 0;
+                            } else {
+                                endDebit = 0;
+                                endCredit = Utils.roundToTwoDecimals(Math.abs(balance));
+                            }
+                        } else if (account.type === 'passive') {
+                            // Пассивный счет: остаток может быть только кредитовым или 0
+                            const balance = startCredit + turnoverCredit - turnoverDebit;
+                            if (balance >= 0) {
+                                endCredit = Utils.roundToTwoDecimals(balance);
+                                endDebit = 0;
+                            } else {
+                                endCredit = 0;
+                                endDebit = Utils.roundToTwoDecimals(Math.abs(balance));
+                            }
+                        } else if (account.type === 'active-passive') {
+                            // Активно-пассивный счет: может быть и дебетовый, и кредитовый остаток
+                            const balance = startDebit + turnoverDebit - turnoverCredit;
+                            if (balance >= 0) {
+                                endDebit = Utils.roundToTwoDecimals(balance);
+                                endCredit = 0;
+                            } else {
+                                endDebit = 0;
+                                endCredit = Utils.roundToTwoDecimals(Math.abs(balance));
+                            }
                         }
+                        
+                        // Округляем все значения
+                        turnoverDebit = Utils.roundToTwoDecimals(turnoverDebit);
+                        turnoverCredit = Utils.roundToTwoDecimals(turnoverCredit);
                         
                         reportData.rows.push({
                             account: account.code,
                             accountName: account.name,
-                            startDebit,
-                            startCredit,
+                            startDebit: Utils.roundToTwoDecimals(startDebit),
+                            startCredit: Utils.roundToTwoDecimals(startCredit),
                             turnoverDebit,
                             turnoverCredit,
                             endDebit,
@@ -3466,12 +3499,12 @@
                         });
                         
                         // Суммируем итоги
-                        reportData.totals.startDebit += startDebit;
-                        reportData.totals.startCredit += startCredit;
-                        reportData.totals.turnoverDebit += turnoverDebit;
-                        reportData.totals.turnoverCredit += turnoverCredit;
-                        reportData.totals.endDebit += endDebit;
-                        reportData.totals.endCredit += endCredit;
+                        reportData.totals.startDebit = Utils.roundToTwoDecimals(reportData.totals.startDebit + startDebit);
+                        reportData.totals.startCredit = Utils.roundToTwoDecimals(reportData.totals.startCredit + startCredit);
+                        reportData.totals.turnoverDebit = Utils.roundToTwoDecimals(reportData.totals.turnoverDebit + turnoverDebit);
+                        reportData.totals.turnoverCredit = Utils.roundToTwoDecimals(reportData.totals.turnoverCredit + turnoverCredit);
+                        reportData.totals.endDebit = Utils.roundToTwoDecimals(reportData.totals.endDebit + endDebit);
+                        reportData.totals.endCredit = Utils.roundToTwoDecimals(reportData.totals.endCredit + endCredit);
                     });
                     
                     this.currentReport.data = reportData;
@@ -3511,11 +3544,11 @@
                         let credit = 0;
                         
                         if (entry.debit === account.code) {
-                            debit = entry.amount || 0;
-                            balance += entry.amount || 0;
+                            debit = Utils.roundToTwoDecimals(entry.amount || 0);
+                            balance = Utils.roundToTwoDecimals(balance + (entry.amount || 0));
                         } else if (entry.credit === account.code) {
-                            credit = entry.amount || 0;
-                            balance -= entry.amount || 0;
+                            credit = Utils.roundToTwoDecimals(entry.amount || 0);
+                            balance = Utils.roundToTwoDecimals(balance - (entry.amount || 0));
                         }
                         
                         return {
