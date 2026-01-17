@@ -168,6 +168,30 @@
             opacity: 0;
         }
         
+        .account-tree {
+            cursor: pointer;
+        }
+        
+        .account-tree-node {
+            padding-left: 1.5rem;
+            position: relative;
+        }
+        
+        .account-tree-toggle {
+            position: absolute;
+            left: 0;
+            top: 0.25rem;
+            width: 1rem;
+            text-align: center;
+            cursor: pointer;
+        }
+        
+        .account-tree-icon {
+            width: 1rem;
+            display: inline-block;
+            text-align: center;
+        }
+        
         @media (max-width: 768px) {
             .sidebar {
                 /* width: 60px; */
@@ -1042,7 +1066,7 @@
                                                             <select class="form-select form-select-sm"
                                                                     x-model="action.debit">
                                                                 <option value="">Выберите счет</option>
-                                                                <template x-for="account in accounts" :key="account.code">
+                                                                <template x-for="account in getLeafAccounts()" :key="account.code">
                                                                     <option :value="account.code" 
                                                                             x-text="account.code + ' - ' + account.name">
                                                                     </option>
@@ -1054,7 +1078,7 @@
                                                             <select class="form-select form-select-sm"
                                                                     x-model="action.credit">
                                                                 <option value="">Выберите счет</option>
-                                                                <template x-for="account in accounts" :key="account.code">
+                                                                <template x-for="account in getLeafAccounts()" :key="account.code">
                                                                     <option :value="account.code" 
                                                                             x-text="account.code + ' - ' + account.name">
                                                                     </option>
@@ -1175,7 +1199,7 @@
                                         <div class="col-md-4">
                                             <select class="form-select form-select-sm" x-model="filterAccount" @change="filterJournal">
                                                 <option value="">Все счета</option>
-                                                <template x-for="account in accounts" :key="account.code">
+                                                <template x-for="account in getFlattenedAccounts()" :key="account.code">
                                                     <option :value="account.code" x-text="account.code + ' - ' + account.name"></option>
                                                 </template>
                                             </select>
@@ -1314,10 +1338,17 @@
                                         <input type="date" class="form-control" x-model="reportParams.dateTo">
                                     </div>
                                     <div class="mb-3">
+                                        <label class="form-label">Уровень детализации</label>
+                                        <select class="form-select" x-model="reportParams.detailLevel">
+                                            <option value="summary">Сводный (по родительским счетам)</option>
+                                            <option value="detailed">Детальный (по субсчетам)</option>
+                                        </select>
+                                    </div>
+                                    <div class="mb-3">
                                         <label class="form-label">Счет</label>
                                         <select class="form-select" x-model="reportParams.account">
                                             <option value="">Все счета</option>
-                                            <template x-for="account in accounts" :key="account.code">
+                                            <template x-for="account in getParentAccounts()" :key="account.code">
                                                 <option :value="account.code" x-text="account.code + ' - ' + account.name"></option>
                                             </template>
                                         </select>
@@ -1369,8 +1400,11 @@
                                                     </thead>
                                                     <tbody>
                                                         <template x-for="row in currentReport.data.rows" :key="row.account">
-                                                            <tr>
-                                                                <td class="mono-font" x-text="row.account + ' ' + row.accountName"></td>
+                                                            <tr :class="row.isParent ? 'table-light fw-bold' : ''">
+                                                                <td :class="{'ps-4': !row.isParent}" class="mono-font">
+                                                                    <span x-text="row.account"></span>
+                                                                    <span x-text="row.accountName ? ' ' + row.accountName : ''"></span>
+                                                                </td>
                                                                 <td class="mono-font text-end" x-text="formatCurrency(row.startDebit)"></td>
                                                                 <td class="mono-font text-end" x-text="formatCurrency(row.startCredit)"></td>
                                                                 <td class="mono-font text-end" x-text="formatCurrency(row.turnoverDebit)"></td>
@@ -1439,9 +1473,14 @@
                             <div class="card card-sm">
                                 <div class="card-header-sm d-flex justify-content-between align-items-center">
                                     <span>План счетов</span>
-                                    <button class="btn btn-sm btn-outline-success" @click="showAccountModal()">
-                                        <i class="fas fa-plus me-1"></i> Добавить счет
-                                    </button>
+                                    <div>
+                                        <button class="btn btn-sm btn-outline-success me-2" @click="showAccountModal()">
+                                            <i class="fas fa-plus me-1"></i> Добавить счет
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-primary" @click="rebuildAccountHierarchy()">
+                                            <i class="fas fa-sitemap me-1"></i> Перестроить иерархию
+                                        </button>
+                                    </div>
                                 </div>
                                 <div class="card-body-sm">
                                     <div class="row mb-3">
@@ -1466,49 +1505,93 @@
                                         </div>
                                     </div>
                                     
-                                    <div class="table-responsive scrollable-table">
-                                        <table class="table table-sm table-hover table-sm-compact">
-                                            <thead>
-                                                <tr>
-                                                    <th>Код</th>
-                                                    <th>Наименование</th>
-                                                    <th>Тип</th>
-                                                    <th>Описание</th>
-                                                    <th>Действия</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <template x-for="account in filteredAccounts" :key="account.code">
-                                                    <tr>
-                                                        <td x-text="account.code" class="mono-font fw-bold"></td>
-                                                        <td x-text="account.name"></td>
-                                                        <td>
-                                                            <span class="badge" 
-                                                                  :class="{
-                                                                      'bg-success': account.type === 'active',
-                                                                      'bg-danger': account.type === 'passive',
-                                                                      'bg-primary': account.type === 'active-passive'
-                                                                  }"
-                                                                  x-text="account.type === 'active' ? 'Активный' : account.type === 'passive' ? 'Пассивный' : 'Активно-пассивный'">
+                                    <!-- Дерево счетов -->
+                                    <div class="account-tree border rounded p-3 bg-light">
+                                        <template x-for="account in filteredAccounts" :key="account.code">
+                                            <div x-show="account.level === 0" class="mb-2">
+                                                <div class="account-tree-node" :style="'padding-left: ' + (account.level * 1.5) + 'rem'">
+                                                    <div class="d-flex justify-content-between align-items-center">
+                                                        <div class="d-flex align-items-center">
+                                                            <span class="account-tree-toggle" 
+                                                                  @click="toggleAccount(account.code)"
+                                                                  x-show="hasChildren(account.code)">
+                                                                <i class="fas" :class="account.expanded ? 'fa-chevron-down' : 'fa-chevron-right'"></i>
                                                             </span>
-                                                        </td>
-                                                        <td>
-                                                            <small class="text-muted" x-text="account.description || 'Нет описания'"></small>
-                                                        </td>
-                                                        <td>
-                                                            <div class="btn-group btn-group-sm">
-                                                                <button class="btn btn-outline-primary me-1" @click="editAccount(account.code)">
-                                                                    <i class="fas fa-edit"></i>
-                                                                </button>
-                                                                <button class="btn btn-outline-danger" @click="deleteAccount(account.code)">
-                                                                    <i class="fas fa-trash"></i>
-                                                                </button>
+                                                            <span class="account-tree-icon" x-show="!hasChildren(account.code)">
+                                                                <i class="fas fa-circle" style="font-size: 0.5rem;"></i>
+                                                            </span>
+                                                            <div class="ms-2">
+                                                                <strong class="mono-font" x-text="account.code"></strong>
+                                                                <span class="ms-2" x-text="account.name"></span>
+                                                                <span class="badge ms-2" 
+                                                                      :class="{
+                                                                          'bg-success': account.type === 'active',
+                                                                          'bg-danger': account.type === 'passive',
+                                                                          'bg-primary': account.type === 'active-passive'
+                                                                      }"
+                                                                      x-text="account.type === 'active' ? 'А' : account.type === 'passive' ? 'П' : 'АП'">
+                                                                </span>
                                                             </div>
-                                                        </td>
-                                                    </tr>
+                                                        </div>
+                                                        <div>
+                                                            <button class="btn btn-sm btn-outline-primary me-1" @click="showAccountModal(account.code)">
+                                                                <i class="fas fa-edit"></i>
+                                                            </button>
+                                                            <button class="btn btn-sm btn-outline-danger" @click="deleteAccount(account.code)">
+                                                                <i class="fas fa-trash"></i>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    <div class="small text-muted ms-4" x-text="account.description || 'Нет описания'"></div>
+                                                </div>
+                                                
+                                                <!-- Дочерние счета -->
+                                                <template x-if="account.expanded">
+                                                    <template x-for="child in getChildren(account.code)" :key="child.code">
+                                                        <div class="account-tree-node" :style="'padding-left: ' + (child.level * 1.5) + 'rem'">
+                                                            <div class="d-flex justify-content-between align-items-center">
+                                                                <div class="d-flex align-items-center">
+                                                                    <span class="account-tree-toggle" 
+                                                                          @click="toggleAccount(child.code)"
+                                                                          x-show="hasChildren(child.code)">
+                                                                        <i class="fas" :class="child.expanded ? 'fa-chevron-down' : 'fa-chevron-right'"></i>
+                                                                    </span>
+                                                                    <span class="account-tree-icon" x-show="!hasChildren(child.code)">
+                                                                        <i class="fas fa-circle" style="font-size: 0.5rem;"></i>
+                                                                    </span>
+                                                                    <div class="ms-2">
+                                                                        <span class="mono-font" x-text="child.code"></span>
+                                                                        <span class="ms-2" x-text="child.name"></span>
+                                                                        <span class="badge ms-2" 
+                                                                              :class="{
+                                                                                  'bg-success': child.type === 'active',
+                                                                                  'bg-danger': child.type === 'passive',
+                                                                                  'bg-primary': child.type === 'active-passive'
+                                                                              }"
+                                                                              x-text="child.type === 'active' ? 'А' : child.type === 'passive' ? 'П' : 'АП'">
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                                <div>
+                                                                    <button class="btn btn-sm btn-outline-primary me-1" @click="showAccountModal(child.code)">
+                                                                        <i class="fas fa-edit"></i>
+                                                                    </button>
+                                                                    <button class="btn btn-sm btn-outline-danger" @click="deleteAccount(child.code)">
+                                                                        <i class="fas fa-trash"></i>
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                            <div class="small text-muted ms-4" x-text="child.description || 'Нет описания'"></div>
+                                                        </div>
+                                                    </template>
                                                 </template>
-                                            </tbody>
-                                        </table>
+                                            </div>
+                                        </template>
+                                    </div>
+                                    
+                                    <!-- Статистика -->
+                                    <div class="mt-3 text-muted small">
+                                        Показано <span x-text="visibleAccountsCount"></span> счетов из <span x-text="accounts.length"></span>
                                     </div>
                                 </div>
                             </div>
@@ -1517,7 +1600,7 @@
                     
                     <!-- Модальное окно счета -->
                     <div class="modal fade" id="accountModal" tabindex="-1" aria-hidden="true">
-                        <div class="modal-dialog">
+                        <div class="modal-dialog modal-lg">
                             <div class="modal-content">
                                 <div class="modal-header">
                                     <h5 class="modal-title" x-text="editingAccount ? 'Редактирование счета' : 'Создание счета'"></h5>
@@ -1525,11 +1608,24 @@
                                 </div>
                                 <div class="modal-body">
                                     <form @submit.prevent="saveAccount()">
-                                        <div class="mb-3">
-                                            <label class="form-label">Код счета *</label>
-                                            <input type="text" class="form-control" 
-                                                   x-model="currentAccount.code" 
-                                                   :disabled="editingAccount" required>
+                                        <div class="row">
+                                            <div class="col-md-6 mb-3">
+                                                <label class="form-label">Код счета *</label>
+                                                <input type="text" class="form-control" 
+                                                       x-model="currentAccount.code" 
+                                                       :disabled="editingAccount" required>
+                                                <div class="form-text">Используйте точку для разделения уровней (например: 62.01)</div>
+                                            </div>
+                                            
+                                            <div class="col-md-6 mb-3">
+                                                <label class="form-label">Родительский счет</label>
+                                                <select class="form-select" x-model="currentAccount.parent">
+                                                    <option value="">Нет (корневой счет)</option>
+                                                    <template x-for="account in getPossibleParents()" :key="account.code">
+                                                        <option :value="account.code" x-text="account.code + ' - ' + account.name"></option>
+                                                    </template>
+                                                </select>
+                                            </div>
                                         </div>
                                         
                                         <div class="mb-3">
@@ -1538,14 +1634,24 @@
                                                    x-model="currentAccount.name" required>
                                         </div>
                                         
-                                        <div class="mb-3">
-                                            <label class="form-label">Тип счета *</label>
-                                            <select class="form-select" x-model="currentAccount.type" required>
-                                                <option value="">Выберите тип</option>
-                                                <option value="active">Активный</option>
-                                                <option value="passive">Пассивный</option>
-                                                <option value="active-passive">Активно-пассивный</option>
-                                            </select>
+                                        <div class="row">
+                                            <div class="col-md-6 mb-3">
+                                                <label class="form-label">Тип счета *</label>
+                                                <select class="form-select" x-model="currentAccount.type" required>
+                                                    <option value="">Выберите тип</option>
+                                                    <option value="active">Активный</option>
+                                                    <option value="passive">Пассивный</option>
+                                                    <option value="active-passive">Активно-пассивный</option>
+                                                </select>
+                                            </div>
+                                            
+                                            <div class="col-md-6 mb-3">
+                                                <label class="form-label">Уровень детализации</label>
+                                                <select class="form-select" x-model="currentAccount.detailLevel">
+                                                    <option value="summary">Сводный (может иметь субсчета)</option>
+                                                    <option value="detail">Детальный (конечный счет для проводок)</option>
+                                                </select>
+                                            </div>
                                         </div>
                                         
                                         <div class="mb-3">
@@ -1924,6 +2030,37 @@
             
             roundToTwoDecimals: (num) => {
                 return Math.round((num + Number.EPSILON) * 100) / 100;
+            },
+            
+            // Получение родительского кода счета из кода субсчета
+            getParentCode: (accountCode) => {
+                if (!accountCode) return null;
+                const parts = accountCode.split('.');
+                if (parts.length > 1) {
+                    return parts.slice(0, -1).join('.');
+                }
+                return null;
+            },
+            
+            // Проверка, является ли счет субсчетом
+            isChildAccount: (accountCode) => {
+                return accountCode && accountCode.includes('.');
+            },
+            
+            // Сравнение кодов счетов для сортировки
+            compareAccountCodes: (a, b) => {
+                const partsA = a.split('.').map(part => part.padStart(10, '0'));
+                const partsB = b.split('.').map(part => part.padStart(10, '0'));
+                const maxLength = Math.max(partsA.length, partsB.length);
+                
+                for (let i = 0; i < maxLength; i++) {
+                    const partA = i < partsA.length ? partsA[i] : '0000000000';
+                    const partB = i < partsB.length ? partsB[i] : '0000000000';
+                    if (partA !== partB) {
+                        return partA.localeCompare(partB);
+                    }
+                }
+                return 0;
             }
         };
         
@@ -1936,7 +2073,7 @@
                     sidebarCollapsed: false,
                     isLoading: false,
                     notifications: [],
-                    version: '1.0.0'
+                    version: '1.1.0' // Обновленная версия
                 },
                 
                 // Данные приложения
@@ -1947,30 +2084,37 @@
                     // Правила
                     rules: [],
                     
-                    // План счетов
+                    // План счетов (иерархическая структура)
                     accounts: [
-                        { code: '50', name: 'Касса', type: 'active', description: 'Наличные денежные средства в кассе организации' },
-                        { code: '51', name: 'Расчетные счета', type: 'active', description: 'Денежные средства на расчетных счетах в банках' },
-                        { code: '52', name: 'Валютные счета', type: 'active', description: 'Денежные средства в иностранной валюте на счетах в банках' },
-                        { code: '58', name: 'Финансовые вложения', type: 'active', description: 'Финансовые вложения организации' },
-                        { code: '60', name: 'Расчеты с поставщиками и подрядчиками', type: 'passive', description: 'Расчеты с поставщиками и подрядчиками за полученные товары, работы, услуги' },
-                        { code: '62', name: 'Расчеты с покупателями и заказчиками', type: 'active', description: 'Расчеты с покупателями и заказчиками за проданные товары, работы, услуги' },
-                        { code: '62.01', name: 'Расчеты с покупателями по основной деятельности', type: 'active', description: 'Расчеты с покупателями по основной деятельности' },
-                        { code: '62.02', name: 'Авансы полученные', type: 'passive', description: 'Полученные авансы от покупателей' },
-                        { code: '68', name: 'Расчеты по налогам и сборам', type: 'passive', description: 'Расчеты по налогам и сборам' },
-                        { code: '69', name: 'Расчеты по социальному страхованию и обеспечению', type: 'passive', description: 'Расчеты по социальному страхованию и обеспечению' },
-                        { code: '70', name: 'Расчеты с персоналом по оплате труда', type: 'passive', description: 'Расчеты с персоналом по оплате труда' },
-                        { code: '71', name: 'Расчеты с подотчетными лицами', type: 'active-passive', description: 'Расчеты с подотчетными лицами' },
-                        { code: '75', name: 'Расчеты с учредителями', type: 'active-passive', description: 'Расчеты с учредителями' },
-                        { code: '76', name: 'Расчеты с разными дебиторами и кредиторами', type: 'active-passive', description: 'Расчеты с разными дебиторами и кредиторами' },
-                        { code: '80', name: 'Уставный капитал', type: 'passive', description: 'Уставный капитал организации' },
-                        { code: '84', name: 'Нераспределенная прибыль (непокрытый убыток)', type: 'passive', description: 'Нераспределенная прибыль или непокрытый убыток' },
-                        { code: '90', name: 'Продажи', type: 'active-passive', description: 'Доходы и расходы по обычным видам деятельности' },
-                        { code: '90.01', name: 'Выручка', type: 'passive', description: 'Выручка от продажи товаров, работ, услуг' },
-                        { code: '90.02', name: 'Себестоимость продаж', type: 'active', description: 'Себестоимость проданных товаров, работ, услуг' },
-                        { code: '90.03', name: 'Налог на добавленную стоимость', type: 'active', description: 'НДС с продаж' },
-                        { code: '91', name: 'Прочие доходы и расходы', type: 'active-passive', description: 'Прочие доходы и расходы' },
-                        { code: '99', name: 'Прибыли и убытки', type: 'active-passive', description: 'Прибыли и убытки' }
+                        // Активные счета
+                        { code: '50', name: 'Касса', type: 'active', parent: null, level: 0, expanded: true, detailLevel: 'detail', description: 'Наличные денежные средства в кассе организации' },
+                        { code: '51', name: 'Расчетные счета', type: 'active', parent: null, level: 0, expanded: true, detailLevel: 'summary', description: 'Денежные средства на расчетных счетах в банках' },
+                        { code: '51.01', name: 'Альфа-Банк', type: 'active', parent: '51', level: 1, expanded: false, detailLevel: 'detail', description: 'Основной расчетный счет' },
+                        { code: '51.02', name: 'Тинькофф', type: 'active', parent: '51', level: 1, expanded: false, detailLevel: 'detail', description: 'Дополнительный расчетный счет' },
+                        
+                        // Пассивные счета
+                        { code: '80', name: 'Уставный капитал', type: 'passive', parent: null, level: 0, expanded: true, detailLevel: 'detail', description: 'Уставный капитал организации' },
+                        { code: '84', name: 'Нераспределенная прибыль', type: 'passive', parent: null, level: 0, expanded: true, detailLevel: 'detail', description: 'Нераспределенная прибыль или непокрытый убыток' },
+                        
+                        // Активно-пассивные счета
+                        { code: '62', name: 'Расчеты с покупателями', type: 'active-passive', parent: null, level: 0, expanded: true, detailLevel: 'summary', description: 'Расчеты с покупателями и заказчиками' },
+                        { code: '62.01', name: 'Расчеты с покупателями по основной деятельности', type: 'active', parent: '62', level: 1, expanded: false, detailLevel: 'detail', description: 'Расчеты с покупателями по основной деятельности' },
+                        { code: '62.02', name: 'Авансы полученные', type: 'passive', parent: '62', level: 1, expanded: false, detailLevel: 'detail', description: 'Полученные авансы от покупателей' },
+                        { code: '62.03', name: 'Расчеты в валюте', type: 'active', parent: '62', level: 1, expanded: false, detailLevel: 'summary', description: 'Расчеты с покупателями в иностранной валюте' },
+                        { code: '62.03.01', name: 'Расчеты в USD', type: 'active', parent: '62.03', level: 2, expanded: false, detailLevel: 'detail', description: 'Расчеты в долларах США' },
+                        { code: '62.03.02', name: 'Расчеты в EUR', type: 'active', parent: '62.03', level: 2, expanded: false, detailLevel: 'detail', description: 'Расчеты в евро' },
+                        
+                        { code: '68', name: 'Расчеты по налогам', type: 'passive', parent: null, level: 0, expanded: true, detailLevel: 'summary', description: 'Расчеты по налогам и сборам' },
+                        { code: '68.01', name: 'НДС', type: 'passive', parent: '68', level: 1, expanded: false, detailLevel: 'detail', description: 'Налог на добавленную стоимость' },
+                        { code: '68.02', name: 'Налог на прибыль', type: 'passive', parent: '68', level: 1, expanded: false, detailLevel: 'detail', description: 'Налог на прибыль организации' },
+                        { code: '68.03', name: 'НДФЛ', type: 'passive', parent: '68', level: 1, expanded: false, detailLevel: 'detail', description: 'Налог на доходы физических лиц' },
+                        
+                        { code: '90', name: 'Продажи', type: 'active-passive', parent: null, level: 0, expanded: true, detailLevel: 'summary', description: 'Доходы и расходы по обычным видам деятельности' },
+                        { code: '90.01', name: 'Выручка', type: 'passive', parent: '90', level: 1, expanded: false, detailLevel: 'detail', description: 'Выручка от продажи товаров, работ, услуг' },
+                        { code: '90.02', name: 'Себестоимость продаж', type: 'active', parent: '90', level: 1, expanded: false, detailLevel: 'detail', description: 'Себестоимость проданных товаров, работ, услуг' },
+                        { code: '90.03', name: 'Налог на добавленную стоимость', type: 'active', parent: '90', level: 1, expanded: false, detailLevel: 'detail', description: 'НДС с продаж' },
+                        
+                        { code: '99', name: 'Прибыли и убытки', type: 'active-passive', parent: null, level: 0, expanded: true, detailLevel: 'detail', description: 'Прибыли и убытки' },
                     ],
                     
                     // Контрагенты
@@ -2010,8 +2154,39 @@
                 // Инициализация
                 init() {
                     globalApp = this;
+                    this.rebuildAccountLevels();
                     this.loadData();
                     this.setupRouter();
+                },
+                
+                // Перестроение уровней счетов
+                rebuildAccountLevels() {
+                    // Сначала сортируем счета
+                    this.data.accounts.sort((a, b) => Utils.compareAccountCodes(a.code, b.code));
+                    
+                    // Пересчитываем уровни и определяем родительские связи
+                    this.data.accounts.forEach(account => {
+                        // Определяем родителя по коду
+                        const parentCode = Utils.getParentCode(account.code);
+                        account.parent = parentCode;
+                        
+                        // Определяем уровень вложенности
+                        account.level = account.code.split('.').length - 1;
+                        
+                        // Устанавливаем начальное состояние развертывания
+                        if (account.expanded === undefined) {
+                            account.expanded = account.level === 0;
+                        }
+                        
+                        // Определяем уровень детализации
+                        if (account.detailLevel === undefined) {
+                            // Проверяем, есть ли у этого счета дочерние счета
+                            const hasChildren = this.data.accounts.some(a => 
+                                a.parent === account.code
+                            );
+                            account.detailLevel = hasChildren ? 'summary' : 'detail';
+                        }
+                    });
                 },
                 
                 // Загрузка данных из LocalStorage
@@ -2027,6 +2202,11 @@
                             }
                         }
                     });
+                    
+                    // Восстанавливаем уровни счетов после загрузки
+                    if (this.data.accounts.length > 0) {
+                        this.rebuildAccountLevels();
+                    }
                     
                     // Инициализация демо-данных если пусто
                     if (this.data.transactions.length === 0) {
@@ -2059,7 +2239,7 @@
                                 { field: 'operationType', operator: '==', value: 'payment' }
                             ],
                             actions: [
-                                { debit: '51', credit: '62.01', amount: 'full' }
+                                { debit: '51.01', credit: '62.01', amount: 'full' }
                             ],
                             priority: 1,
                             version: '1.0',
@@ -2075,7 +2255,7 @@
                                 { field: 'operationType', operator: '==', value: 'advance' }
                             ],
                             actions: [
-                                { debit: '51', credit: '62.02', amount: 'full' }
+                                { debit: '51.01', credit: '62.02', amount: 'full' }
                             ],
                             priority: 2,
                             version: '1.0',
@@ -2085,14 +2265,14 @@
                         },
                         {
                             id: 'rule_3',
-                            name: 'Налоговый платеж',
-                            description: 'Уплата налогов',
+                            name: 'Налоговый платеж (НДС)',
+                            description: 'Уплата НДС',
                             conditions: [
                                 { field: 'operationType', operator: '==', value: 'tax' },
                                 { field: 'description', operator: 'contains', value: 'НДС' }
                             ],
                             actions: [
-                                { debit: '68', credit: '51', amount: 'full' }
+                                { debit: '68.01', credit: '51.01', amount: 'full' }
                             ],
                             priority: 3,
                             version: '1.0',
@@ -2149,7 +2329,7 @@
                             transactionId: 'tx_1',
                             ruleId: 'rule_1',
                             date: new Date().toISOString(),
-                            debit: '51',
+                            debit: '51.01',
                             credit: '62.01',
                             amount: 15000.00,
                             description: 'Оплата по счету №123 от ООО "Ромашка"',
@@ -2161,11 +2341,11 @@
                             transactionId: 'tx_3',
                             ruleId: 'rule_3',
                             date: new Date(Date.now() - 172800000).toISOString(),
-                            debit: '68',
-                            credit: '51',
+                            debit: '68.01',
+                            credit: '51.01',
                             amount: 3000.00,
                             description: 'Уплата НДС за квартал',
-                            ruleName: 'Налоговый платеж',
+                            ruleName: 'Налоговый платеж (НДС)',
                             createdAt: new Date(Date.now() - 172800000).toISOString()
                         }
                     ];
@@ -2219,6 +2399,112 @@
                     }
                 },
                 
+                // Геттеры и вспомогательные методы для счетов
+                getAccountByCode(code) {
+                    return this.data.accounts.find(acc => acc.code === code);
+                },
+                
+                getChildrenAccounts(parentCode) {
+                    return this.data.accounts.filter(acc => acc.parent === parentCode);
+                },
+                
+                getAllDescendants(parentCode) {
+                    const result = [];
+                    const getDescendants = (code) => {
+                        const children = this.getChildrenAccounts(code);
+                        children.forEach(child => {
+                            result.push(child);
+                            getDescendants(child.code);
+                        });
+                    };
+                    getDescendants(parentCode);
+                    return result;
+                },
+                
+                getLeafAccounts() {
+                    return this.data.accounts.filter(acc => acc.detailLevel === 'detail');
+                },
+                
+                getParentAccounts() {
+                    return this.data.accounts.filter(acc => acc.parent === null);
+                },
+                
+                getFlattenedAccounts() {
+                    return [...this.data.accounts].sort((a, b) => Utils.compareAccountCodes(a.code, b.code));
+                },
+                
+                // Валидация проводки
+                validateJournalEntry(debitAccountCode, creditAccountCode, amount) {
+                    const debitAccount = this.getAccountByCode(debitAccountCode);
+                    const creditAccount = this.getAccountByCode(creditAccountCode);
+                    
+                    if (!debitAccount || !creditAccount) {
+                        return { valid: false, message: 'Один из счетов не найден' };
+                    }
+                    
+                    if (amount <= 0) {
+                        return { valid: false, message: 'Сумма должна быть положительной' };
+                    }
+                    
+                    // Проверка, что счет предназначен для проводок
+                    if (debitAccount.detailLevel !== 'detail') {
+                        return { valid: false, message: `Счет ${debitAccountCode} не предназначен для проводок (только сводный)` };
+                    }
+                    
+                    if (creditAccount.detailLevel !== 'detail') {
+                        return { valid: false, message: `Счет ${creditAccountCode} не предназначен для проводок (только сводный)` };
+                    }
+                    
+                    return { valid: true };
+                },
+                
+                // Расчет остатка по счету с учетом иерархии
+                calculateAccountBalance(accountCode, asOfDate = null) {
+                    const account = this.getAccountByCode(accountCode);
+                    if (!account) return { debit: 0, credit: 0 };
+                    
+                    // Если счет имеет субсчета, агрегируем их
+                    if (account.detailLevel === 'summary') {
+                        const descendants = this.getAllDescendants(accountCode).filter(acc => acc.detailLevel === 'detail');
+                        let totalDebit = 0;
+                        let totalCredit = 0;
+                        
+                        descendants.forEach(descendant => {
+                            const balance = this.calculateLeafAccountBalance(descendant.code, asOfDate);
+                            totalDebit += balance.debit;
+                            totalCredit += balance.credit;
+                        });
+                        
+                        return { debit: totalDebit, credit: totalCredit };
+                    } else {
+                        return this.calculateLeafAccountBalance(accountCode, asOfDate);
+                    }
+                },
+                
+                // Расчет остатка для конечного счета (без субсчетов)
+                calculateLeafAccountBalance(accountCode, asOfDate = null) {
+                    const journalEntries = this.data.journal.filter(entry => {
+                        if (asOfDate && new Date(entry.date) > new Date(asOfDate)) {
+                            return false;
+                        }
+                        return entry.debit === accountCode || entry.credit === accountCode;
+                    });
+                    
+                    let debit = 0;
+                    let credit = 0;
+                    
+                    journalEntries.forEach(entry => {
+                        if (entry.debit === accountCode) {
+                            debit += entry.amount || 0;
+                        }
+                        if (entry.credit === accountCode) {
+                            credit += entry.amount || 0;
+                        }
+                    });
+                    
+                    return { debit, credit };
+                },
+                
                 // Геттеры
                 getCurrentViewTitle() {
                     const titles = {
@@ -2253,10 +2539,6 @@
                 
                 getPendingTransactions() {
                     return this.data.transactions.filter(tx => tx.status === 'pending');
-                },
-                
-                getAccountByCode(code) {
-                    return this.data.accounts.find(acc => acc.code === code);
                 },
                 
                 getContractorById(id) {
@@ -2316,6 +2598,9 @@
                                             this.saveData(key);
                                         });
                                         
+                                        // Перестраиваем иерархию счетов
+                                        this.rebuildAccountLevels();
+                                        
                                         this.addNotification('success', 'Данные успешно импортированы');
                                         setTimeout(() => location.reload(), 1000);
                                     }
@@ -2343,7 +2628,7 @@
                                 currency: 'RUB',
                                 autoSave: 'true',
                                 showNotifications: true
-                            } : key === 'accounts' ? this.data.accounts : [];
+                            } : key === 'accounts' ? [] : [];
                         });
                         
                         this.initializeDemoData();
@@ -2360,7 +2645,7 @@
                 
                 // Показать справку
                 showHelp() {
-                    alert('Pocket Accounting - бухгалтерская программа в браузере.\n\nОсновные функции:\n1. Создание операций\n2. Настройка правил для автоматических проводок\n3. Просмотр журнала проводок\n4. Генерация отчетов\n5. Управление планом счетов и контрагентами\n\nВсе данные хранятся локально в вашем браузере.');
+                    alert('Pocket Accounting v1.1.0 - бухгалтерская программа в браузере.\n\nНовые возможности версии 1.1:\n1. Иерархическая структура счетов с субсчетами\n2. Автоматическое агрегирование по родительским счетам\n3. Корректный расчет остатков с учетом типов счетов\n4. Валидация проводок\n\nВсе данные хранятся локально в вашем браузере.');
                 }
             };
         }
@@ -2524,6 +2809,22 @@
                     const matchingRule = this.findMatchingRule(transaction);
                     
                     if (matchingRule) {
+                        // Проверяем все действия перед созданием проводок
+                        const validationErrors = [];
+                        matchingRule.actions.forEach((action, index) => {
+                            const validation = globalApp.validateJournalEntry(action.debit, action.credit, 
+                                this.calculateAmount(transaction.amount, action.amount));
+                            if (!validation.valid) {
+                                validationErrors.push(`Действие ${index + 1}: ${validation.message}`);
+                            }
+                        });
+                        
+                        if (validationErrors.length > 0) {
+                            globalApp.addNotification('error', 
+                                `Невозможно применить правило "${matchingRule.name}":\n${validationErrors.join('\n')}`);
+                            return;
+                        }
+                        
                         // Создаем проводки для каждого действия
                         matchingRule.actions.forEach(action => {
                             const journalEntry = {
@@ -2886,7 +3187,6 @@
                     version: '1.0',
                     active: true
                 },
-                accounts: [],
                 
                 // Инициализация
                 init() {
@@ -2899,8 +3199,13 @@
                     if (globalApp) {
                         this.rules = globalApp.data.rules || [];
                         this.filteredRules = [...this.rules];
-                        this.accounts = globalApp.data.accounts || [];
                     }
+                },
+                
+                // Получение листовых счетов для выбора в действиях
+                getLeafAccounts() {
+                    if (!globalApp) return [];
+                    return globalApp.getLeafAccounts();
                 },
                 
                 // Фильтрация правил
@@ -3010,6 +3315,30 @@
                     }
                     
                     if (!globalApp) return;
+                    
+                    // Валидация счетов в действиях
+                    const validationErrors = [];
+                    this.currentRule.actions.forEach((action, index) => {
+                        const debitAccount = globalApp.getAccountByCode(action.debit);
+                        const creditAccount = globalApp.getAccountByCode(action.credit);
+                        
+                        if (!debitAccount) {
+                            validationErrors.push(`Действие ${index + 1}: Счет дебета "${action.debit}" не найден`);
+                        } else if (debitAccount.detailLevel !== 'detail') {
+                            validationErrors.push(`Действие ${index + 1}: Счет дебета "${action.debit}" не является конечным счетом`);
+                        }
+                        
+                        if (!creditAccount) {
+                            validationErrors.push(`Действие ${index + 1}: Счет кредита "${action.credit}" не найден`);
+                        } else if (creditAccount.detailLevel !== 'detail') {
+                            validationErrors.push(`Действие ${index + 1}: Счет кредита "${action.credit}" не является конечным счетом`);
+                        }
+                    });
+                    
+                    if (validationErrors.length > 0) {
+                        alert('Ошибки в действиях:\n' + validationErrors.join('\n'));
+                        return;
+                    }
                     
                     if (this.editingRule) {
                         const oldRule = this.rules.find(r => r.id === this.editingRule);
@@ -3180,6 +3509,12 @@
                     }
                 },
                 
+                // Получение всех счетов (уплощенный список)
+                getFlattenedAccounts() {
+                    if (!globalApp) return [];
+                    return globalApp.getFlattenedAccounts();
+                },
+                
                 // Фильтрация журнала
                 filterJournal() {
                     let filtered = [...this.journal];
@@ -3197,9 +3532,22 @@
                     }
                     
                     if (this.filterAccount) {
-                        filtered = filtered.filter(entry => 
-                            entry.debit === this.filterAccount || entry.credit === this.filterAccount
-                        );
+                        const account = globalApp ? globalApp.getAccountByCode(this.filterAccount) : null;
+                        if (account) {
+                            if (account.detailLevel === 'summary') {
+                                // Если выбран родительский счет, показываем все проводки по его субсчетам
+                                const descendantCodes = globalApp.getAllDescendants(account.code)
+                                    .filter(acc => acc.detailLevel === 'detail')
+                                    .map(acc => acc.code);
+                                filtered = filtered.filter(entry => 
+                                    descendantCodes.includes(entry.debit) || descendantCodes.includes(entry.credit)
+                                );
+                            } else {
+                                filtered = filtered.filter(entry => 
+                                    entry.debit === this.filterAccount || entry.credit === this.filterAccount
+                                );
+                            }
+                        }
                     }
                     
                     this.filteredJournal = filtered.sort((a, b) => 
@@ -3352,17 +3700,13 @@
                 reportParams: {
                     dateFrom: '',
                     dateTo: '',
-                    account: ''
+                    account: '',
+                    detailLevel: 'summary'
                 },
-                accounts: [],
-                journal: [],
                 
                 // Инициализация
                 init() {
                     if (globalApp) {
-                        this.accounts = globalApp.data.accounts || [];
-                        this.journal = globalApp.data.journal || [];
-                        
                         // Устанавливаем даты по умолчанию (текущий месяц)
                         const today = new Date();
                         const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -3370,6 +3714,12 @@
                         this.reportParams.dateFrom = firstDay.toISOString().split('T')[0];
                         this.reportParams.dateTo = today.toISOString().split('T')[0];
                     }
+                },
+                
+                // Получение родительских счетов для выбора
+                getParentAccounts() {
+                    if (!globalApp) return [];
+                    return globalApp.getParentAccounts();
                 },
                 
                 // Генерация отчета
@@ -3398,7 +3748,7 @@
                 generateTurnoverReport() {
                     this.currentReport.name = 'Оборотно-сальдовая ведомость';
                     
-                    const filteredJournal = this.journal.filter(entry => {
+                    const filteredJournal = globalApp.data.journal.filter(entry => {
                         if (this.reportParams.dateFrom && new Date(entry.date || 0) < new Date(this.reportParams.dateFrom)) {
                             return false;
                         }
@@ -3420,82 +3770,134 @@
                         }
                     };
                     
-                    // Для каждого счета рассчитываем показатели
-                    this.accounts.forEach(account => {
-                        if (this.reportParams.account && account.code !== this.reportParams.account) {
-                            return;
+                    // Определяем, какие счета показывать
+                    let accountsToShow = [];
+                    if (this.reportParams.account) {
+                        // Если выбран конкретный счет
+                        const account = globalApp.getAccountByCode(this.reportParams.account);
+                        if (account) {
+                            if (this.reportParams.detailLevel === 'summary' && account.detailLevel === 'summary') {
+                                // Показываем родительский счет и его субсчета
+                                accountsToShow.push(account);
+                                const descendants = globalApp.getAllDescendants(account.code);
+                                accountsToShow.push(...descendants);
+                            } else {
+                                // Показываем только выбранный счет
+                                accountsToShow.push(account);
+                            }
                         }
+                    } else {
+                        // Показываем все счета в зависимости от уровня детализации
+                        if (this.reportParams.detailLevel === 'summary') {
+                            accountsToShow = globalApp.getParentAccounts();
+                        } else {
+                            accountsToShow = globalApp.getFlattenedAccounts();
+                        }
+                    }
+                    
+                    // Для каждого счета рассчитываем показатели
+                    accountsToShow.forEach(account => {
+                        // Рассчитываем начальные остатки (до даты начала периода)
+                        const startBalance = globalApp.calculateAccountBalance(account.code, this.reportParams.dateFrom);
                         
-                        const accountEntries = filteredJournal.filter(entry => 
-                            entry.debit === account.code || entry.credit === account.code
-                        );
-                        
-                        // Начальные остатки (в простой реализации считаем 0)
-                        const startDebit = 0;
-                        const startCredit = 0;
-                        
-                        // Обороты
+                        // Рассчитываем обороты за период
                         let turnoverDebit = 0;
                         let turnoverCredit = 0;
                         
-                        accountEntries.forEach(entry => {
-                            if (entry.debit === account.code) {
-                                turnoverDebit += entry.amount || 0;
-                            }
-                            if (entry.credit === account.code) {
-                                turnoverCredit += entry.amount || 0;
+                        const accountEntries = filteredJournal.filter(entry => {
+                            // Для родительских счетов проверяем все субсчета
+                            if (account.detailLevel === 'summary') {
+                                const descendantCodes = globalApp.getAllDescendants(account.code)
+                                    .filter(acc => acc.detailLevel === 'detail')
+                                    .map(acc => acc.code);
+                                return descendantCodes.includes(entry.debit) || descendantCodes.includes(entry.credit);
+                            } else {
+                                return entry.debit === account.code || entry.credit === account.code;
                             }
                         });
                         
-                        // Конечные остатки - правильная логика в зависимости от типа счета
+                        accountEntries.forEach(entry => {
+                            // Проверяем дебет
+                            if (account.detailLevel === 'summary') {
+                                const descendantCodes = globalApp.getAllDescendants(account.code)
+                                    .filter(acc => acc.detailLevel === 'detail')
+                                    .map(acc => acc.code);
+                                if (descendantCodes.includes(entry.debit)) {
+                                    turnoverDebit += entry.amount || 0;
+                                }
+                                if (descendantCodes.includes(entry.credit)) {
+                                    turnoverCredit += entry.amount || 0;
+                                }
+                            } else {
+                                if (entry.debit === account.code) {
+                                    turnoverDebit += entry.amount || 0;
+                                }
+                                if (entry.credit === account.code) {
+                                    turnoverCredit += entry.amount || 0;
+                                }
+                            }
+                        });
+                        
+                        // Рассчитываем конечные остатки с учетом типа счета
                         let endDebit = 0;
                         let endCredit = 0;
                         
                         if (account.type === 'active') {
-                            // Активный счет: остаток может быть только дебетовым или 0
-                            const balance = startDebit + turnoverDebit - turnoverCredit;
-                            if (balance >= 0) {
-                                endDebit = Utils.roundToTwoDecimals(balance);
+                            // Активный счет: дебетовое сальдо
+                            const totalDebit = startBalance.debit + turnoverDebit;
+                            const totalCredit = startBalance.credit + turnoverCredit;
+                            
+                            if (totalDebit >= totalCredit) {
+                                endDebit = Utils.roundToTwoDecimals(totalDebit - totalCredit);
                                 endCredit = 0;
                             } else {
+                                // Для активного счета это недопустимо, но показываем как кредитовое
                                 endDebit = 0;
-                                endCredit = Utils.roundToTwoDecimals(Math.abs(balance));
+                                endCredit = Utils.roundToTwoDecimals(totalCredit - totalDebit);
                             }
                         } else if (account.type === 'passive') {
-                            // Пассивный счет: остаток может быть только кредитовым или 0
-                            const balance = startCredit + turnoverCredit - turnoverDebit;
-                            if (balance >= 0) {
-                                endCredit = Utils.roundToTwoDecimals(balance);
+                            // Пассивный счет: кредитовое сальдо
+                            const totalDebit = startBalance.debit + turnoverDebit;
+                            const totalCredit = startBalance.credit + turnoverCredit;
+                            
+                            if (totalCredit >= totalDebit) {
+                                endCredit = Utils.roundToTwoDecimals(totalCredit - totalDebit);
                                 endDebit = 0;
                             } else {
+                                // Для пассивного счета это недопустимо, но показываем как дебетовое
                                 endCredit = 0;
-                                endDebit = Utils.roundToTwoDecimals(Math.abs(balance));
+                                endDebit = Utils.roundToTwoDecimals(totalDebit - totalCredit);
                             }
                         } else if (account.type === 'active-passive') {
-                            // Активно-пассивный счет: может быть и дебетовый, и кредитовый остаток
-                            const balance = startDebit + turnoverDebit - turnoverCredit;
-                            if (balance >= 0) {
-                                endDebit = Utils.roundToTwoDecimals(balance);
+                            // Активно-пассивный счет: может быть и дебетовое, и кредитовое сальдо
+                            const totalDebit = startBalance.debit + turnoverDebit;
+                            const totalCredit = startBalance.credit + turnoverCredit;
+                            
+                            if (totalDebit >= totalCredit) {
+                                endDebit = Utils.roundToTwoDecimals(totalDebit - totalCredit);
                                 endCredit = 0;
                             } else {
                                 endDebit = 0;
-                                endCredit = Utils.roundToTwoDecimals(Math.abs(balance));
+                                endCredit = Utils.roundToTwoDecimals(totalCredit - totalDebit);
                             }
                         }
                         
-                        // Округляем все значения
+                        // Округляем значения
+                        const startDebit = Utils.roundToTwoDecimals(startBalance.debit);
+                        const startCredit = Utils.roundToTwoDecimals(startBalance.credit);
                         turnoverDebit = Utils.roundToTwoDecimals(turnoverDebit);
                         turnoverCredit = Utils.roundToTwoDecimals(turnoverCredit);
                         
                         reportData.rows.push({
                             account: account.code,
                             accountName: account.name,
-                            startDebit: Utils.roundToTwoDecimals(startDebit),
-                            startCredit: Utils.roundToTwoDecimals(startCredit),
+                            startDebit,
+                            startCredit,
                             turnoverDebit,
                             turnoverCredit,
                             endDebit,
-                            endCredit
+                            endCredit,
+                            isParent: account.parent === null || (this.reportParams.detailLevel === 'summary' && account.detailLevel === 'summary')
                         });
                         
                         // Суммируем итоги
@@ -3507,6 +3909,9 @@
                         reportData.totals.endCredit = Utils.roundToTwoDecimals(reportData.totals.endCredit + endCredit);
                     });
                     
+                    // Сортируем строки отчета
+                    reportData.rows.sort((a, b) => Utils.compareAccountCodes(a.account, b.account));
+                    
                     this.currentReport.data = reportData;
                 },
                 
@@ -3517,7 +3922,7 @@
                         return;
                     }
                     
-                    const account = this.accounts.find(acc => acc.code === this.reportParams.account);
+                    const account = globalApp.getAccountByCode(this.reportParams.account);
                     if (!account) {
                         alert('Счет не найден');
                         return;
@@ -3525,17 +3930,26 @@
                     
                     this.currentReport.name = `Анализ счета: ${account.code} - ${account.name}`;
                     
-                    const filteredJournal = this.journal.filter(entry => {
+                    // Определяем, какие счета анализировать
+                    let accountCodes = [];
+                    if (account.detailLevel === 'summary') {
+                        // Для родительского счета анализируем все листовые субсчета
+                        const descendants = globalApp.getAllDescendants(account.code)
+                            .filter(acc => acc.detailLevel === 'detail');
+                        accountCodes = descendants.map(acc => acc.code);
+                    } else {
+                        accountCodes = [account.code];
+                    }
+                    
+                    // Фильтруем проводки
+                    const filteredJournal = globalApp.data.journal.filter(entry => {
                         if (this.reportParams.dateFrom && new Date(entry.date || 0) < new Date(this.reportParams.dateFrom)) {
                             return false;
                         }
                         if (this.reportParams.dateTo && new Date(entry.date || 0) > new Date(this.reportParams.dateTo + 'T23:59:59')) {
                             return false;
                         }
-                        if (entry.debit !== account.code && entry.credit !== account.code) {
-                            return false;
-                        }
-                        return true;
+                        return accountCodes.includes(entry.debit) || accountCodes.includes(entry.credit);
                     }).sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
                     
                     let balance = 0;
@@ -3543,12 +3957,22 @@
                         let debit = 0;
                         let credit = 0;
                         
-                        if (entry.debit === account.code) {
+                        if (accountCodes.includes(entry.debit)) {
                             debit = Utils.roundToTwoDecimals(entry.amount || 0);
-                            balance = Utils.roundToTwoDecimals(balance + (entry.amount || 0));
-                        } else if (entry.credit === account.code) {
+                            // Для активных счетов дебет увеличивает остаток
+                            if (account.type === 'active' || (account.type === 'active-passive' && balance >= 0)) {
+                                balance = Utils.roundToTwoDecimals(balance + (entry.amount || 0));
+                            } else {
+                                balance = Utils.roundToTwoDecimals(balance - (entry.amount || 0));
+                            }
+                        } else if (accountCodes.includes(entry.credit)) {
                             credit = Utils.roundToTwoDecimals(entry.amount || 0);
-                            balance = Utils.roundToTwoDecimals(balance - (entry.amount || 0));
+                            // Для активных счетов кредит уменьшает остаток
+                            if (account.type === 'active' || (account.type === 'active-passive' && balance >= 0)) {
+                                balance = Utils.roundToTwoDecimals(balance - (entry.amount || 0));
+                            } else {
+                                balance = Utils.roundToTwoDecimals(balance + (entry.amount || 0));
+                            }
                         }
                         
                         return {
@@ -3613,6 +4037,7 @@
                 // Состояние модуля
                 accounts: [],
                 filteredAccounts: [],
+                visibleAccounts: [],
                 searchTerm: '',
                 filterType: '',
                 editingAccount: null,
@@ -3620,36 +4045,101 @@
                     code: '',
                     name: '',
                     type: '',
+                    parent: '',
+                    detailLevel: 'detail',
                     description: ''
                 },
+                expandedAccounts: new Set(),
                 
                 // Инициализация
                 init() {
                     this.loadAccounts();
+                    this.filterAccounts();
                 },
                 
                 // Загрузка счетов
                 loadAccounts() {
                     if (globalApp) {
                         this.accounts = globalApp.data.accounts || [];
-                        this.filteredAccounts = [...this.accounts];
+                        this.updateExpandedAccounts();
                     }
                 },
                 
-                // Фильтрация счетов
+                // Обновление списка развернутых счетов
+                updateExpandedAccounts() {
+                    this.expandedAccounts.clear();
+                    this.accounts.forEach(account => {
+                        if (account.expanded) {
+                            this.expandedAccounts.add(account.code);
+                        }
+                    });
+                },
+                
+                // Переключение видимости счета в дереве
+                toggleAccount(accountCode) {
+                    const account = this.accounts.find(acc => acc.code === accountCode);
+                    if (account) {
+                        account.expanded = !account.expanded;
+                        if (account.expanded) {
+                            this.expandedAccounts.add(accountCode);
+                        } else {
+                            this.expandedAccounts.delete(accountCode);
+                        }
+                        this.filterAccounts();
+                    }
+                },
+                
+                // Проверка, есть ли у счета дочерние счета
+                hasChildren(accountCode) {
+                    return this.accounts.some(acc => acc.parent === accountCode);
+                },
+                
+                // Получение дочерних счетов
+                getChildren(parentCode) {
+                    return this.accounts.filter(acc => acc.parent === parentCode);
+                },
+                
+                // Фильтрация счетов для отображения в дереве
                 filterAccounts() {
-                    this.filteredAccounts = this.accounts.filter(account => {
-                        const matchesSearch = !this.searchTerm || 
-                            account.code.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
-                            account.name.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
-                            (account.description && account.description.toLowerCase().includes(this.searchTerm.toLowerCase()));
+                    let filtered = [...this.accounts];
+                    
+                    // Применяем текстовый фильтр
+                    if (this.searchTerm) {
+                        const searchLower = this.searchTerm.toLowerCase();
+                        filtered = filtered.filter(account => 
+                            account.code.toLowerCase().includes(searchLower) ||
+                            account.name.toLowerCase().includes(searchLower) ||
+                            (account.description && account.description.toLowerCase().includes(searchLower))
+                        );
+                    }
+                    
+                    // Применяем фильтр по типу
+                    if (this.filterType) {
+                        filtered = filtered.filter(account => account.type === this.filterType);
+                    }
+                    
+                    // Определяем, какие счета показывать с учетом развернутости
+                    this.visibleAccounts = filtered.filter(account => {
+                        if (account.level === 0) return true; // Все корневые счета
                         
-                        const matchesType = !this.filterType || account.type === this.filterType;
-                        
-                        return matchesSearch && matchesType;
+                        // Проверяем, развернут ли родительский счет
+                        let parentCode = account.parent;
+                        while (parentCode) {
+                            const parent = this.accounts.find(acc => acc.code === parentCode);
+                            if (!parent || !this.expandedAccounts.has(parent.code)) {
+                                return false;
+                            }
+                            parentCode = parent.parent;
+                        }
+                        return true;
                     });
                     
-                    this.filteredAccounts.sort((a, b) => a.code.localeCompare(b.code));
+                    this.filteredAccounts = this.visibleAccounts;
+                },
+                
+                // Количество видимых счетов
+                get visibleAccountsCount() {
+                    return this.visibleAccounts.length;
                 },
                 
                 // Сброс фильтров
@@ -3657,6 +4147,11 @@
                     this.searchTerm = '';
                     this.filterType = '';
                     this.filterAccounts();
+                },
+                
+                // Получение возможных родительских счетов
+                getPossibleParents() {
+                    return this.accounts.filter(account => account.detailLevel === 'summary');
                 },
                 
                 // Показать модальное окно счета
@@ -3678,6 +4173,8 @@
                         code: '',
                         name: '',
                         type: '',
+                        parent: '',
+                        detailLevel: 'detail',
                         description: ''
                     };
                 },
@@ -3708,7 +4205,26 @@
                         return;
                     }
                     
+                    // Проверка формата кода счета
+                    if (!/^[0-9]+(\.[0-9]+)*$/.test(this.currentAccount.code)) {
+                        alert('Код счета должен содержать только цифры и точки (например: 51.01)');
+                        return;
+                    }
+                    
                     if (!globalApp) return;
+                    
+                    // Проверяем, не является ли родительский счет дочерним для текущего
+                    if (this.currentAccount.parent) {
+                        let parentCode = this.currentAccount.parent;
+                        while (parentCode) {
+                            if (parentCode === this.currentAccount.code) {
+                                alert('Счет не может быть родителем для самого себя');
+                                return;
+                            }
+                            const parentAccount = this.accounts.find(acc => acc.code === parentCode);
+                            parentCode = parentAccount ? parentAccount.parent : null;
+                        }
+                    }
                     
                     if (this.editingAccount) {
                         const index = this.accounts.findIndex(acc => acc.code === this.editingAccount);
@@ -3724,9 +4240,12 @@
                         this.accounts.push(this.currentAccount);
                     }
                     
+                    // Перестраиваем иерархию
                     globalApp.data.accounts = this.accounts;
+                    globalApp.rebuildAccountLevels();
                     globalApp.saveData('accounts');
                     
+                    this.loadAccounts(); // Перезагружаем с обновленными уровнями
                     this.filterAccounts();
                     
                     const modal = bootstrap.Modal.getInstance(document.getElementById('accountModal'));
@@ -3751,17 +4270,54 @@
                             return;
                         }
                         
-                        const index = this.accounts.findIndex(acc => acc.code === accountCode);
-                        if (index > -1) {
-                            this.accounts.splice(index, 1);
+                        // Проверяем, есть ли дочерние счета
+                        const hasChildren = this.accounts.some(acc => acc.parent === accountCode);
+                        if (hasChildren) {
+                            if (!confirm('У счета есть дочерние счета. Удалить все?')) {
+                                return;
+                            }
+                            // Удаляем все дочерние счета
+                            const toDelete = [accountCode];
+                            const getDescendants = (parentCode) => {
+                                const children = this.accounts.filter(acc => acc.parent === parentCode);
+                                children.forEach(child => {
+                                    toDelete.push(child.code);
+                                    getDescendants(child.code);
+                                });
+                            };
+                            getDescendants(accountCode);
                             
-                            globalApp.data.accounts = this.accounts;
-                            globalApp.saveData('accounts');
-                            
-                            this.filterAccounts();
-                            globalApp.addNotification('warning', 'Счет удален');
+                            // Удаляем все счета из массива
+                            this.accounts = this.accounts.filter(acc => !toDelete.includes(acc.code));
+                        } else {
+                            // Удаляем только этот счет
+                            const index = this.accounts.findIndex(acc => acc.code === accountCode);
+                            if (index > -1) {
+                                this.accounts.splice(index, 1);
+                            }
                         }
+                        
+                        globalApp.data.accounts = this.accounts;
+                        globalApp.rebuildAccountLevels();
+                        globalApp.saveData('accounts');
+                        
+                        this.loadAccounts();
+                        this.filterAccounts();
+                        globalApp.addNotification('warning', 'Счет удален');
                     }
+                },
+                
+                // Перестроение иерархии счетов
+                rebuildAccountHierarchy() {
+                    if (!globalApp) return;
+                    
+                    globalApp.rebuildAccountLevels();
+                    globalApp.saveData('accounts');
+                    
+                    this.loadAccounts();
+                    this.filterAccounts();
+                    
+                    globalApp.addNotification('success', 'Иерархия счетов перестроена');
                 }
             };
         }
@@ -3918,7 +4474,7 @@
         
         // Инициализация Alpine.js
         document.addEventListener('alpine:init', () => {
-            console.log('Pocket Accounting инициализирован!');
+            console.log('Pocket Accounting v1.1 инициализирован!');
             
             // Инициализация Bootstrap тултипов
             const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
