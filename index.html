@@ -191,18 +191,111 @@
             display: inline-block;
             text-align: center;
         }
+
+        .table-responsive {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch; /* плавный скролл на iOS */
+        }
+
         
         @media (max-width: 768px) {
             .sidebar {
-                /* width: 60px; */
+                position: fixed;
+                left: -220px; /* скрыт за пределами экрана */
+                z-index: 1050;
+                height: 100vh;
+                transition: left 0.3s;
             }
+            
+            .sidebar.sidebar-collapsed {
+                left: 0; /* показываем при открытии */
+            }
+            
             .main-content {
-                /* margin-left: 60px; */
+                margin-left: 0;
+                width: 100%;
             }
+            
             .sidebar-brand-text {
                 display: none;
             }
+
+            .table-sm-compact th:nth-child(4),
+            .table-sm-compact td:nth-child(4),
+            .table-sm-compact th:nth-child(6),
+            .table-sm-compact td:nth-child(6),
+            .table-sm-compact th:nth-child(7),
+            .table-sm-compact td:nth-child(7) {
+                display: none;
+            }
+
+            /* Модальные окна */
+            .modal-dialog {
+                margin: 10px;
+            }
+            .modal-body {
+                padding: 15px;
+                max-height: 70vh;
+                overflow-y: auto;
+            }
+
+            /* Дерево счетов */
+            .account-tree-node {
+                padding-left: 1rem;
+            }
+            
+            .account-tree-node > div {
+                flex-direction: column;
+                align-items: flex-start !important;
+            }
+            
+            .account-tree-node > div > div:last-child {
+                margin-top: 5px;
+            }
+            
+            /* Карточки */
+            .card-body-sm {
+                padding: 0.5rem;
+            }
+            
+            .card-header-sm {
+                padding: 0.5rem;
+                font-size: 0.8rem;
+            }
+
+            /* Touch-friendly */
+            .btn, 
+            .form-control, 
+            .form-select,
+            .nav-link-sidebar {
+                min-height: 44px; /* Apple рекомендует минимум 44px для тач-элементов */
+            }
+            
+            .table-sm-compact td {
+                padding: 0.5rem 0.3rem;
+            }
         }
+
+        @media (max-width: 576px) {
+            /* Формы */
+            .compact-form .form-control,
+            .compact-form .form-select {
+                font-size: 0.875rem; /* чуть больше для мобильных */
+                height: calc(1.8em + 0.5rem + 2px);
+            }
+            
+            .btn-group.btn-group-sm {
+                flex-wrap: wrap;
+                gap: 2px;в
+            }
+            
+            .btn-group.btn-group-sm .btn {
+                padding: 0.2rem 0.4rem;
+                font-size: 0.75rem;
+                margin: 1px;
+            }
+        }
+
     </style>
 </head>
 <body class="h-100">
@@ -2344,11 +2437,24 @@
                 navigateTo(view) {
                     this.state.currentView = view;
                     window.location.hash = view;
+                    
+                    if (window.innerWidth <= 768) {
+                        this.state.sidebarCollapsed = !this.state.sidebarCollapsed;
+                    }
                 },
                 
                 // Переключение сайдбара
                 toggleSidebar() {
                     this.state.sidebarCollapsed = !this.state.sidebarCollapsed;
+
+                    // На мобильных устройствах добавляем/удаляем класс для body
+                    if (window.innerWidth <= 768) {
+                        if (this.state.sidebarCollapsed) {
+                            document.body.style.overflow = 'hidden'; // блокируем скролл
+                        } else {
+                            document.body.style.overflow = '';
+                        }
+                    }
                 },
                 
                 // Добавление уведомления
