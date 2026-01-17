@@ -2289,7 +2289,7 @@
                             date: new Date().toISOString(),
                             operationType: 'payment',
                             contractorId: '1',
-                            amount: 15000.00,
+                            amount: 15000.00, // ОК
                             description: 'Оплата по счету №123 от ООО "Ромашка"',
                             status: 'processed',
                             ruleApplied: 'rule_1',
@@ -2301,7 +2301,7 @@
                             date: new Date(Date.now() - 86400000).toISOString(),
                             operationType: 'advance',
                             contractorId: '3',
-                            amount: 5000.00,
+                            amount: 5000.00, // ОК
                             description: 'Аванс 50% от АО "Тюльпан"',
                             status: 'pending',
                             ruleApplied: null,
@@ -2313,7 +2313,7 @@
                             date: new Date(Date.now() - 172800000).toISOString(),
                             operationType: 'tax',
                             contractorId: '',
-                            amount: 3000.00,
+                            amount: 3000.00, // ОК
                             description: 'Уплата НДС за квартал',
                             status: 'processed',
                             ruleApplied: 'rule_3',
@@ -2323,32 +2323,7 @@
                     ];
                     
                     // Демо-проводки
-                    this.data.journal = [
-                        {
-                            id: 'je_1',
-                            transactionId: 'tx_1',
-                            ruleId: 'rule_1',
-                            date: new Date().toISOString(),
-                            debit: '51.01',
-                            credit: '62.01',
-                            amount: 15000.00,
-                            description: 'Оплата по счету №123 от ООО "Ромашка"',
-                            ruleName: 'Оплата от покупателя',
-                            createdAt: new Date().toISOString()
-                        },
-                        {
-                            id: 'je_2',
-                            transactionId: 'tx_3',
-                            ruleId: 'rule_3',
-                            date: new Date(Date.now() - 172800000).toISOString(),
-                            debit: '68.01',
-                            credit: '51.01',
-                            amount: 3000.00,
-                            description: 'Уплата НДС за квартал',
-                            ruleName: 'Налоговый платеж (НДС)',
-                            createdAt: new Date(Date.now() - 172800000).toISOString()
-                        }
-                    ];
+                    this.data.journal = [];
                     
                     // Сохранение демо-данных
                     ['rules', 'transactions', 'journal'].forEach(key => this.saveData(key));
@@ -2815,7 +2790,7 @@
                             const validation = globalApp.validateJournalEntry(action.debit, action.credit, 
                                 this.calculateAmount(transaction.amount, action.amount));
                             if (!validation.valid) {
-                                validationErrors.push(`Действие ${index + 1}: ${validation.message}`);
+                                validationErrors.push(`Действие[${index + 1}]: ${validation.message}`);
                             }
                         });
                         
