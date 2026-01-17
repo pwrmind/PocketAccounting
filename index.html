@@ -2741,6 +2741,8 @@
                         id: Utils.generateId(),
                         createdAt: new Date().toISOString()
                     };
+
+                    transaction.amount = parseFloat(transaction.amount) || 0;
                     
                     this.transactions.push(transaction);
                     
@@ -2873,6 +2875,7 @@
                 
                 // Расчет суммы с округлением
                 calculateAmount(baseAmount, amountType) {
+                    const base = parseFloat(baseAmount) || 0;
                     let result;
                     switch (amountType) {
                         case 'full': result = baseAmount; break;
@@ -3029,6 +3032,7 @@
                 updateTransaction() {
                     const index = this.transactions.findIndex(t => t.id === this.editingTransaction.id);
                     if (index > -1) {
+                        this.editingTransaction.amount = parseFloat(this.editingTransaction.amount) || 0;
                         this.transactions[index] = this.editingTransaction;
                         
                         // Если статус изменился на "ожидает", сбрасываем правило
